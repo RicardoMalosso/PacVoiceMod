@@ -165,12 +165,25 @@ class App:
         ]):
             self.localized(ttk.Button, actions, label, command=action).grid(
                 row=index // 3, column=index % 3, sticky="ew", padx=2, pady=2)
-        for row, variable in enumerate([self.model_status, self.audio_status, self.twitch_status, self.meters], 8):
+        ttk.Label(panel, textvariable=self.model_status, wraplength=520).grid(
+            row=8, columnspan=2, sticky="w")
+        self.progress_panel = ttk.Frame(panel)
+        self.progress_panel.grid(row=9, columnspan=2, sticky="ew", pady=(2, 6))
+        self.progress_panel.grid_remove()
+        self.progress = ttk.Progressbar(self.progress_panel, maximum=100)
+        self.progress.pack(fill="x")
+        self.progress_label = tk.StringVar()
+        ttk.Label(self.progress_panel, textvariable=self.progress_label).pack(anchor="w")
+        self.progress_mode = None
+        self.progress_message = None
+        self.progress_started = 0
+        self.progress_bytes = 0
+        for row, variable in enumerate([self.audio_status, self.twitch_status, self.meters], 10):
             ttk.Label(panel, textvariable=variable, wraplength=520).grid(row=row, columnspan=2, sticky="w")
         self.localized(ttk.Label, panel, "Model ZIPs go in models/ or can be selected from Downloads.",
-                  wraplength=520).grid(row=12, columnspan=2, sticky="w")
+                  wraplength=520).grid(row=13, columnspan=2, sticky="w")
         recorder = self.localized(ttk.LabelFrame, panel, "Sample recorder", padding=8)
-        recorder.grid(row=13, columnspan=2, sticky="ew", pady=(10, 0))
+        recorder.grid(row=14, columnspan=2, sticky="ew", pady=(10, 0))
         self.localized(ttk.Label, recorder, "Headphones / speakers").grid(row=0, column=0, sticky="w")
         self.playback_outputs = ttk.Combobox(recorder, textvariable=self.playback,
                                              state="readonly", width=36)
@@ -182,22 +195,18 @@ class App:
         ]):
             self.localized(ttk.Button, recorder, label, command=action).grid(
                 row=1 + index // 3, column=index % 3, sticky="ew", padx=2, pady=2)
+        self.localized(ttk.Label, recorder, "Sample playback position").grid(
+            row=3, columnspan=3, sticky="w", pady=(5, 0))
         self.position = tk.DoubleVar(value=0)
         self.timeline = ttk.Scale(recorder, from_=0, to=1, variable=self.position, state="disabled")
-        self.timeline.grid(row=3, columnspan=3, sticky="ew", pady=(5, 0))
+        self.timeline.grid(row=4, columnspan=3, sticky="ew")
         self.timeline.bind("<ButtonPress-1>", self.begin_seek)
         for event in ("<ButtonRelease-1>", "<KeyRelease-Left>", "<KeyRelease-Right>"):
             self.timeline.bind(event, self.end_seek)
         self.player_status = tk.StringVar()
-        ttk.Label(recorder, textvariable=self.player_status).grid(row=4, columnspan=3, sticky="w")
+        ttk.Label(recorder, textvariable=self.player_status).grid(row=5, columnspan=3, sticky="w")
         ttk.Label(recorder, textvariable=self.sample_status, wraplength=520).grid(
-            row=5, columnspan=3, sticky="w")
-        self.progress = ttk.Progressbar(panel, maximum=100)
-        self.progress.grid(row=14, columnspan=2, sticky="ew", pady=(8, 0))
-        self.progress.grid_remove()
-        self.progress_label = tk.StringVar()
-        ttk.Label(panel, textvariable=self.progress_label).grid(row=15, columnspan=2, sticky="w")
-
+            row=6, columnspan=3, sticky="w")
         setup = self.localized(ttk.LabelFrame, root, "Setup checklist", padding=10)
         setup.grid(row=1, column=1, sticky="ne", padx=(0, 14), pady=14)
         self.localized(ttk.Label, setup,
@@ -343,14 +352,17 @@ class App:
         folder = Path(self.vcclient_folder) if self.vcclient_folder else None
         self.engine = None
         self.preparing = True
-        self.set_status(self.model_status, "Loading and warming the RVC voice…")
+        self.show_progress("Checking VCClient…")
+
+        def report_progress(*progress):
+            self.events.put(("model_status", progress))
 
         def load():
             engine = Engine(port, slot)
             try:
                 self.vcclient.ensure_running(
                     engine, folder, port,
-                    lambda *progress: self.events.put(("model_status", progress)),
+                    report_progress,
                 )
                 if self.vcclient.closed.is_set():
                     return
@@ -363,9 +375,8 @@ class App:
             except Exception as exc:
                 self.events.put(("model", (None, str(exc), {})))
                 return
-            self.events.put(("model_status", ("Loading and warming the RVC voice…",)))
             try:
-                engine.prepare(weights, index)
+                engine.prepare(weights, index, status=report_progress)
             except (EngineAPIError, EngineUnavailable) as exc:
                 self.events.put(("model", (None, exc.message, {"address": exc.address})))
             except Exception as exc:
@@ -518,26 +529,39 @@ class App:
 
     def show_progress(self, message, completed=0, total=0):
         self.set_status(self.model_status, message)
+        if self.progress_message != message:
+            self.progress_message = message
+            self.progress_started = time.monotonic()
+        self.progress_bytes = completed
         mode = "determinate" if total else "indeterminate"
-        if str(self.progress.cget("mode")) != mode or not self.progress.winfo_ismapped():
+        if self.progress_mode != mode:
             self.progress.stop()
             self.progress.configure(mode=mode, value=0)
-            self.progress.grid()
+            self.progress_panel.grid()
             if not total:
                 self.progress.start(45)
+            self.progress_mode = mode
         if total:
             percent = min(100, completed * 100 / total)
             self.progress.configure(value=percent)
             self.progress_label.set(f"{percent:.0f}% · {completed / 1024**2:.0f} / {total / 1024**2:.0f} MiB")
-        elif completed:
-            self.progress_label.set(f"{completed / 1024**2:.0f} MiB")
         else:
-            self.progress_label.set("")
+            self.update_progress_elapsed()
+
+    def update_progress_elapsed(self):
+        if self.progress_mode == "indeterminate":
+            elapsed = int(time.monotonic() - self.progress_started)
+            label = self.tr("Elapsed: {seconds} s", seconds=elapsed)
+            if self.progress_bytes:
+                label = f"{self.progress_bytes / 1024**2:.0f} MiB · {label}"
+            self.progress_label.set(label)
 
     def hide_progress(self):
         self.progress.stop()
-        self.progress.grid_remove()
+        self.progress_panel.grid_remove()
         self.progress_label.set("")
+        self.progress_mode = None
+        self.progress_message = None
 
     def poll(self):
         for _ in range(100):
@@ -559,6 +583,7 @@ class App:
                     self.activate()
                 elif kind == "finished":
                     self.twitch_stop = None
+        self.update_progress_elapsed()
         if self.audio:
             if not self.audio.stream.active:
                 self.stop_audio()

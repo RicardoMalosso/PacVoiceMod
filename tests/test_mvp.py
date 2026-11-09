@@ -52,6 +52,19 @@ class ModelImportTests(unittest.TestCase):
             with self.assertRaisesRegex(EngineUnavailable, "127.0.0.1:18889"):
                 engine.prepare()
 
+    def test_loading_saved_voice_reports_gpu_load_and_warmup(self):
+        engine = Engine(18888, 90)
+        info = {"gpus": [{"id": 0}], "modelSlots": [{"slotIndex": 90, "voiceChangerType": "RVC"}]}
+        status = MagicMock()
+        with (patch.object(engine, "request", return_value=info),
+              patch.object(engine, "convert") as convert):
+            engine.prepare(status=status)
+        self.assertEqual([call.args[0] for call in status.call_args_list], [
+            "Checking the CUDA engine…", "Loading the voice on the GPU…",
+            "Warming up voice conversion…",
+        ])
+        convert.assert_called_once()
+
     def test_engine_rejects_one_sample_error_response(self):
         engine = Engine(18888, 90)
         with patch.object(engine, "request", return_value={"changedVoiceBase64": "AAA="}):

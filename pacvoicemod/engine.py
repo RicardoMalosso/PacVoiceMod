@@ -121,17 +121,24 @@ class Engine:
                      data={"filename": name, "filenameChunkNum": count})
         return {"name": name, "kind": kind, "dir": ""}
 
-    def prepare(self, weights=None, index=None):
+    def prepare(self, weights=None, index=None, *, status=None):
+        if status is None:
+            def status(_message):
+                pass
+
+        status("Checking the CUDA engine…")
         info = self.request("GET", "/info")
         if not info.get("gpus"):
             raise RuntimeError("VCClient reports no CUDA GPU. Start the Windows CUDA build.")
         self.setting("enableServerAudio", 0)
         if weights:
+            status("Reading the voice files…")
             with tempfile.TemporaryDirectory() as temporary:
                 directory = Path(temporary)
                 sources = model_files(weights, index, directory)
                 checkpoint = directory / "checkpoint.pth"
                 shutil.copyfile(sources[0][0], checkpoint)
+                status("Validating the voice checkpoint…")
                 validation = subprocess.run(
                     [sys.executable, "-m", "pacvoicemod.validate_model", str(checkpoint)],
                     capture_output=True, text=True, timeout=60,
@@ -139,10 +146,12 @@ class Engine:
                 )
                 if validation.returncode:
                     raise ValueError(validation.stderr.strip() or "RVC checkpoint validation failed.")
+                status("Sending voice files to VCClient…")
                 files = [self.upload(checkpoint, "rvcModel")]
                 files.extend(self.upload(path, kind) for path, kind in sources[1:])
                 params = {"voiceChangerType": "RVC", "slot": self.slot,
                           "isSampleMode": False, "sampleId": "", "files": files, "params": {}}
+                status("Importing the voice into the model slot…")
                 self.request("POST", "/load_model", timeout=90,
                              data={"slot": self.slot, "isHalf": "false", "params": json.dumps(params)})
         info = self.request("GET", "/info")
@@ -151,6 +160,7 @@ class Engine:
                       and item.get("voiceChangerType") == "RVC"), None)
         if not model:
             raise RuntimeError(f"No RVC model in VCClient slot {self.slot}. Import a voice first.")
+        status("Loading the voice on the GPU…")
         self.setting("modelSlotIndex", self.slot)
         self.setting("gpu", info["gpus"][0]["id"])
         self.setting("inputSampleRate", RATE)
@@ -158,6 +168,7 @@ class Engine:
         self.setting("indexRatio", 0.25 if model.get("indexFile") else 0)
         samples = np.arange(FRAMES)
         probe = (4000 * np.sin(2 * np.pi * 180 * samples / RATE)).astype("<i2")
+        status("Warming up voice conversion…")
         self.convert(probe.tobytes(), timeout=30)
 
     def convert(self, pcm, timeout=1):

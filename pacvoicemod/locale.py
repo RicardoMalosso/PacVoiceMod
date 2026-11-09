@@ -1,4 +1,14 @@
 PT_BR = {
+    "Sample playback position": "Posição da reprodução da amostra",
+    "Checking VCClient…": "Verificando o VCClient…",
+    "Checking the CUDA engine…": "Verificando o motor CUDA…",
+    "Reading the voice files…": "Lendo os arquivos de voz…",
+    "Validating the voice checkpoint…": "Validando o checkpoint da voz…",
+    "Sending voice files to VCClient…": "Enviando os arquivos de voz ao VCClient…",
+    "Importing the voice into the model slot…": "Importando a voz para o slot do modelo…",
+    "Loading the voice on the GPU…": "Carregando a voz na GPU…",
+    "Warming up voice conversion…": "Preparando a conversão de voz…",
+    "Elapsed: {seconds} s": "Tempo decorrido: {seconds} s",
     "VCClient answered at {address}, but this build uses a different API. PacVoiceMod requires the /info and /test endpoints.":
         "O VCClient respondeu em {address}, mas esta versão usa outra API. O PacVoiceMod precisa das rotas /info e /test.",
     "VCClient is still setting up its modules and samples…":
