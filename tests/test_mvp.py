@@ -70,8 +70,12 @@ class VCClientStartupTests(unittest.TestCase):
             with (patch("pacvoicemod.vcclient.BUILD_SHA256", hashlib.sha256(payload).hexdigest()),
                   patch("pacvoicemod.vcclient.requests.get") as download):
                 response = download.return_value.__enter__.return_value
+                response.headers = {"Content-Length": str(len(payload))}
                 response.iter_content.return_value = [payload]
-                folder = install_vcclient(destination, Event(), MagicMock())
+                status = MagicMock()
+                folder = install_vcclient(destination, Event(), status)
+                status.assert_any_call("Downloading VCClient CUDA (about 3 GB)…", len(payload), len(payload))
+                status.assert_any_call("Extracting VCClient CUDA…", len(b"example"), len(b"example"))
                 self.assertEqual(folder, destination / "nested")
                 self.assertEqual((folder / "MMVCServerSIO.exe").read_bytes(), b"example")
                 self.assertEqual(install_vcclient(destination, Event(), MagicMock()), folder)

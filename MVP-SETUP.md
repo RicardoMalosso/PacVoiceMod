@@ -12,12 +12,12 @@
    ```
 
    This PyTorch install is for restricted checkpoint validation. VCClient supplies its own CUDA runtime for conversion.
-3. On your first **Import voice**, PacVoiceMod downloads the [official VCClient Windows CUDA build](https://huggingface.co/wok000/vcclient000/blob/1679ae1848c3cfdd11388626b1733bb782065156/vcclient_win_cuda_2.0.65-beta.zip), checks its SHA-256, and extracts it into `PacVoiceMod/runtime/`. The download is about 3 GB and requires additional free space for extraction. PacVoiceMod starts VCClient and continues the import when the engine responds. If you already have an extracted copy, use **Use existing VCClient folder** before importing to skip the download.
+3. On your first **Import voice**, PacVoiceMod downloads the [official VCClient Windows CUDA build](https://huggingface.co/wok000/vcclient000/blob/1679ae1848c3cfdd11388626b1733bb782065156/vcclient_win_cuda_2.0.65-beta.zip), shows download progress, checks its SHA-256, and extracts it into `PacVoiceMod/runtime/`. The download is about 3 GB and requires additional free space for extraction. PacVoiceMod starts VCClient and continues the import when the engine responds. If you already have an extracted copy, use **Use existing VCClient folder** before importing to skip the download.
 4. Install [VB-CABLE](https://vb-audio.com/Cable/index.htm) using its administrator setup and reboot. The app's **Get VB-CABLE** button opens the official download page.
 
 ## Connect the mic, voice, and chat
 
-Use the checklist on the right to track setup. The buttons at the top switch between Brazilian Portuguese (🇧🇷) and US English (🇨🇦). PacVoiceMod saves your language and checked steps.
+Use **For initial testing** and **For streaming to OBS** in the checklist on the right to track setup. The checkboxes are reminders only and do not change any settings. The buttons at the top switch between Brazilian Portuguese (🇧🇷) and US English (🇨🇦). PacVoiceMod saves your language and checked steps.
 
 1. Launch `.\.venv\Scripts\python.exe -m pacvoicemod` from the repo root. Select your physical microphone and **CABLE Input**.
 2. Download a trusted RVC ZIP from [voice-models.com](https://voice-models.com/) and put it in **`PacVoiceMod/models/`** (for example, `PacVoiceMod/models/my-voice.zip`). Leave it zipped. **Import voice** opens that folder, and you can also browse to Downloads or any other folder. Import a ZIP with one model, or pick an extracted `.pth` and optionally its matching `.index`. If the archive has several candidates, extract it yourself and pick the pair. Model imports replace the configured VCClient slot. Checkpoint validation uses restricted loading. Import indexes only from a publisher you trust because VCClient parses them with its native FAISS loader.

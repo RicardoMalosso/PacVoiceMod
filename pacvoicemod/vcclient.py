@@ -3,7 +3,6 @@
 import hashlib
 import os
 from pathlib import Path, PurePosixPath
-import shutil
 import subprocess
 import tempfile
 from threading import Event, Lock
@@ -23,6 +22,7 @@ BUILD_URL = (
     "https://huggingface.co/wok000/vcclient000/resolve/"
     f"1679ae1848c3cfdd11388626b1733bb782065156/{BUILD}.zip"
 )
+CHUNK_SIZE = 1024 * 1024
 BUILD_SHA256 = "ba66c89f1be5d373554e084924e18216c5e7447e2a0adc778b8613d755510859"
 
 
@@ -49,23 +49,38 @@ def install_vcclient(destination, closed, status):
         scratch = Path(temporary)
         archive = scratch / "vcclient.zip"
         digest = hashlib.sha256()
-        status("Downloading VCClient CUDA (about 3 GB)…")
+        download_message = "Downloading VCClient CUDA (about 3 GB)…"
+        status(download_message)
         with requests.get(BUILD_URL, stream=True, timeout=(10, 30)) as response:
             response.raise_for_status()
+            length = response.headers.get("Content-Length", "")
+            total = int(length) if length.isdecimal() else 0
+            received = 0
+            next_update = 0
             with archive.open("wb") as output:
-                for chunk in response.iter_content(chunk_size=1024 * 1024):
+                for chunk in response.iter_content(chunk_size=CHUNK_SIZE):
                     if closed.is_set():
                         return None
                     digest.update(chunk)
                     output.write(chunk)
+                    received += len(chunk)
+                    now = time.monotonic()
+                    if now >= next_update or (total and received >= total):
+                        status(download_message, received, total)
+                        next_update = now + 0.2
         if digest.hexdigest() != BUILD_SHA256:
             raise StartupError("VCClient download failed its checksum. Retry to download a fresh copy.")
 
-        status("Extracting VCClient CUDA…")
+        extract_message = "Extracting VCClient CUDA…"
+        status(extract_message)
         staging = scratch / "build"
         staging.mkdir()
         with zipfile.ZipFile(archive) as package:
-            for entry in package.infolist():
+            entries = package.infolist()
+            total = sum(entry.file_size for entry in entries)
+            extracted = 0
+            next_update = 0
+            for entry in entries:
                 if closed.is_set():
                     return None
                 name = PurePosixPath(entry.filename)
@@ -77,7 +92,15 @@ def install_vcclient(destination, closed, status):
                 else:
                     target.parent.mkdir(parents=True, exist_ok=True)
                     with package.open(entry) as source, target.open("wb") as output:
-                        shutil.copyfileobj(source, output)
+                        while chunk := source.read(CHUNK_SIZE):
+                            if closed.is_set():
+                                return None
+                            output.write(chunk)
+                            extracted += len(chunk)
+                            now = time.monotonic()
+                            if now >= next_update or extracted == total:
+                                status(extract_message, extracted, total)
+                                next_update = now + 0.2
         folder = find_installation(staging)
         if folder is None:
             raise StartupError("VCClient archive does not contain a supported HTTP launcher.")

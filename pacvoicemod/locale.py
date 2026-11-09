@@ -1,4 +1,10 @@
 PT_BR = {
+    "For initial testing": "Para o teste inicial",
+    "For streaming to OBS": "Para transmitir pelo OBS",
+    "Checkboxes are reminders only. They do not change any settings.":
+        "As caixas servem só como lembretes e não alteram configurações.",
+    "Play the original and processed samples": "Ouça as amostras original e processada",
+    "Mute the duplicate raw mic in OBS": "Silencie a captura duplicada do microfone no OBS",
     "Use existing VCClient folder": "Usar pasta existente do VCClient",
     "VCClient installs automatically when you import a voice.":
         "O VCClient será instalado automaticamente ao importar uma voz.",

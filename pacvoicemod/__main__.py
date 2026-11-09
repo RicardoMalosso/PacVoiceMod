@@ -139,21 +139,38 @@ class App:
                 row=1 + index // 3, column=index % 3, sticky="ew", padx=2, pady=2)
         ttk.Label(recorder, textvariable=self.sample_status, wraplength=520).grid(
             row=3, columnspan=3, sticky="w")
+        self.progress = ttk.Progressbar(panel, maximum=100)
+        self.progress.grid(row=14, columnspan=2, sticky="ew", pady=(8, 0))
+        self.progress.grid_remove()
+        self.progress_label = tk.StringVar()
+        ttk.Label(panel, textvariable=self.progress_label).grid(row=15, columnspan=2, sticky="w")
+
         setup = self.localized(ttk.LabelFrame, root, "Setup checklist", padding=10)
         setup.grid(row=1, column=1, sticky="ne", padx=(0, 14), pady=14)
-        self.localized(ttk.Label, setup, "Check each step as you finish it.").pack(anchor="w", pady=(0, 6))
-        for key, step in [
-            ("cable", "Install VB-CABLE and reboot"),
-            ("engine", "Let PacVoiceMod install VCClient CUDA"),
-            ("model", "Import a voice ZIP from models/"),
-            ("devices", "Select your mic and CABLE Input"),
-            ("record", "Start audio and record a test"),
-            ("obs", "Select CABLE Output in OBS"),
-            ("twitch", "Connect Twitch and test the chat command"),
-        ]:
-            checked = tk.BooleanVar(value=saved.get("checklist", {}).get(key, False))
-            self.checklist[key] = checked
-            self.localized(ttk.Checkbutton, setup, step, variable=checked).pack(anchor="w", pady=2)
+        self.localized(ttk.Label, setup,
+                       "Checkboxes are reminders only. They do not change any settings.",
+                       wraplength=290).pack(anchor="w", pady=(0, 6))
+        sections = [
+            ("For initial testing", [
+                ("cable", "Install VB-CABLE and reboot"),
+                ("engine", "Let PacVoiceMod install VCClient CUDA"),
+                ("model", "Import a voice ZIP from models/"),
+                ("devices", "Select your mic and CABLE Input"),
+                ("record", "Start audio and record a test"),
+                ("playback", "Play the original and processed samples"),
+            ]),
+            ("For streaming to OBS", [
+                ("obs", "Select CABLE Output in OBS"),
+                ("obs_raw_mic", "Mute the duplicate raw mic in OBS"),
+                ("twitch", "Connect Twitch and test the chat command"),
+            ]),
+        ]
+        for title, steps in sections:
+            self.localized(ttk.Label, setup, title, font="TkHeadingFont").pack(anchor="w", pady=(8, 3))
+            for key, step in steps:
+                checked = tk.BooleanVar(value=saved.get("checklist", {}).get(key, False))
+                self.checklist[key] = checked
+                self.localized(ttk.Checkbutton, setup, step, variable=checked).pack(anchor="w", pady=2)
         for status in (self.audio_status, self.model_status, self.twitch_status, self.sample_status):
             self.set_status(status, status.get())
         self.refresh()
@@ -244,7 +261,6 @@ class App:
             messagebox.showerror(self.tr("Model"), self.tr(exc.message, **exc.details))
             return
         self.vcclient_folder = selected
-        self.checklist["engine"].set(True)
         self.prepare(weights, index)
 
     def prepare(self, weights=None, index=None):
@@ -269,7 +285,7 @@ class App:
             try:
                 self.vcclient.ensure_running(
                     engine, folder, port,
-                    lambda status: self.events.put(("model_status", (status,))),
+                    lambda *progress: self.events.put(("model_status", progress)),
                 )
                 if self.vcclient.closed.is_set():
                     return
@@ -394,6 +410,29 @@ class App:
             self.twitch_stop = None
         self.set_status(self.twitch_status, "Twitch disconnected")
 
+    def show_progress(self, message, completed=0, total=0):
+        self.set_status(self.model_status, message)
+        mode = "determinate" if total else "indeterminate"
+        if str(self.progress.cget("mode")) != mode or not self.progress.winfo_ismapped():
+            self.progress.stop()
+            self.progress.configure(mode=mode, value=0)
+            self.progress.grid()
+            if not total:
+                self.progress.start(45)
+        if total:
+            percent = min(100, completed * 100 / total)
+            self.progress.configure(value=percent)
+            self.progress_label.set(f"{percent:.0f}% · {completed / 1024**2:.0f} / {total / 1024**2:.0f} MiB")
+        elif completed:
+            self.progress_label.set(f"{completed / 1024**2:.0f} MiB")
+        else:
+            self.progress_label.set("")
+
+    def hide_progress(self):
+        self.progress.stop()
+        self.progress.grid_remove()
+        self.progress_label.set("")
+
     def poll(self):
         for _ in range(100):
             try:
@@ -401,8 +440,9 @@ class App:
             except Empty:
                 break
             if kind == "model_status":
-                self.set_status(self.model_status, values[0])
+                self.show_progress(*values)
             elif kind == "model":
+                self.hide_progress()
                 self.engine, status, details = values
                 self.preparing = False
                 self.set_status(self.model_status, status, **details)
