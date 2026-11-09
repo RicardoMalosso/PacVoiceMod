@@ -1,4 +1,6 @@
 PT_BR = {
+    "VCClient is still setting up its modules and samples…":
+        "O VCClient ainda está preparando seus módulos e amostras…",
     "Pause playback": "Pausar reprodução",
     "Original": "Original",
     "Processed output": "Saída processada",

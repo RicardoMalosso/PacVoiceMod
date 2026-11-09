@@ -23,6 +23,8 @@ BUILD_URL = (
     f"1679ae1848c3cfdd11388626b1733bb782065156/{BUILD}.zip"
 )
 CHUNK_SIZE = 1024 * 1024
+STARTUP_IDLE_SECONDS = 300
+STARTUP_MAX_SECONDS = 1800
 BUILD_SHA256 = "ba66c89f1be5d373554e084924e18216c5e7447e2a0adc778b8613d755510859"
 
 
@@ -159,7 +161,9 @@ class LocalVCClient:
                     )
             process = self.process
         status("Starting VCClient…")
-        deadline = time.monotonic() + 180
+        started = time.monotonic()
+        last_activity = started
+        log_size = 0
         while not self.closed.is_set():
             try:
                 engine.request("GET", "/info", timeout=3)
@@ -167,7 +171,16 @@ class LocalVCClient:
             except (EngineUnavailable, Timeout):
                 if process.poll() is not None:
                     raise StartupError("VCClient exited during startup. See {log}.", log=self.log)
-                if time.monotonic() >= deadline:
+                now = time.monotonic()
+                try:
+                    current_size = self.log.stat().st_size
+                except OSError:
+                    current_size = log_size
+                if current_size != log_size:
+                    log_size = current_size
+                    last_activity = now
+                    status("VCClient is still setting up its modules and samples…")
+                if now - started >= STARTUP_MAX_SECONDS or now - last_activity >= STARTUP_IDLE_SECONDS:
                     raise StartupError("VCClient did not respond at {address}. See {log}.",
                                        address=engine.base, log=self.log)
                 self.closed.wait(0.5)

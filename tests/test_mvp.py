@@ -119,6 +119,35 @@ class VCClientStartupTests(unittest.TestCase):
             self.assertEqual(engine.request.call_count, 3)
             started.assert_called_once_with("Starting VCClient…")
 
+    def test_startup_keeps_waiting_when_vcclient_is_still_writing_logs(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary)
+            (folder / "MMVCServerSIO.exe").touch()
+            log = folder / "vcclient.log"
+            manager = LocalVCClient(log)
+            engine = MagicMock()
+            unavailable = EngineUnavailable("http://127.0.0.1:18888")
+            calls = iter((False, False, False, True))
+
+            def probe(*args, **kwargs):
+                if next(calls):
+                    return {}
+                if log.exists():
+                    with log.open("a") as output:
+                        output.write("Downloading module\n")
+                raise unavailable
+
+            engine.request.side_effect = probe
+            status = MagicMock()
+            with (patch("pacvoicemod.vcclient.subprocess.CREATE_NO_WINDOW", 0, create=True),
+                  patch("pacvoicemod.vcclient.subprocess.Popen") as launch,
+                  patch("pacvoicemod.vcclient.time.monotonic", side_effect=[0, 290, 580]),
+                  patch.object(manager.closed, "wait")):
+                launch.return_value.poll.return_value = None
+                manager.ensure_running(engine, folder, 18888, status)
+            self.assertEqual(engine.request.call_count, 4)
+            status.assert_any_call("VCClient is still setting up its modules and samples…")
+
     def test_batch_launcher_runs_from_its_own_folder(self):
         with tempfile.TemporaryDirectory() as temporary:
             folder = Path(temporary)

@@ -37,7 +37,7 @@ The latest take is kept in memory until you record again or close PacVoiceMod. Y
 
 ## If voice import says it cannot reach VCClient
 
-If you selected a manual VCClient installation and moved it, use **Use existing VCClient folder** to select it again. If startup fails, read `%LOCALAPPDATA%\PacVoiceMod\vcclient.log`. The first start may take up to three minutes while the engine initializes. You can check the default port from PowerShell:
+If you selected a manual VCClient installation and moved it, use **Use existing VCClient folder** to select it again. If startup fails, read `%LOCALAPPDATA%\PacVoiceMod\vcclient.log`. The first start may take several minutes while VCClient downloads its own modules and sample voices. PacVoiceMod waits up to five minutes without new log activity, with a 30-minute overall limit. You can check the default port from PowerShell:
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:18888/info
