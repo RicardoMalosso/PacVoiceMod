@@ -65,6 +65,14 @@ class EngineUnavailable(Exception):
         super().__init__(self.message.format(address=address))
 
 
+class EngineAPIError(RuntimeError):
+    message = "VCClient answered at {address}, but this build uses a different API. PacVoiceMod requires the /info and /test endpoints."
+
+    def __init__(self, address):
+        self.address = address
+        super().__init__(self.message.format(address=address))
+
+
 class Engine:
     def __init__(self, port, slot):
         self.base = f"http://127.0.0.1:{port}"
@@ -78,10 +86,20 @@ class Engine:
                                          allow_redirects=False, **kwargs)
         except requests.ConnectionError as exc:
             raise EngineUnavailable(self.base) from exc
+        if path == "/info" and response.status_code == 404:
+            raise EngineAPIError(self.base)
         response.raise_for_status()
         if response.is_redirect:
             raise RuntimeError("VCClient must run over loopback HTTP.")
-        data = response.json()
+        try:
+            data = response.json()
+        except requests.exceptions.JSONDecodeError as exc:
+            if path == "/info":
+                raise EngineAPIError(self.base) from exc
+            raise
+        if path == "/info" and (not isinstance(data, dict) or
+                                not {"gpus", "modelSlots"} <= data.keys()):
+            raise EngineAPIError(self.base)
         if not isinstance(data, dict) or data.get("status") in {"ERROR", "ng"}:
             raise RuntimeError(f"VCClient rejected {path}. Check its console.")
         return data

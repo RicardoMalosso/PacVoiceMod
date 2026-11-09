@@ -45,6 +45,10 @@ Invoke-RestMethod http://127.0.0.1:18888/info
 
 If your build's batch launcher uses a different port, set the same port in PacVoiceMod. PacVoiceMod stops the server it started when you close the app. An instance you started separately stays running.
 
+## VCClient demo window and API compatibility
+
+The CUDA package launcher can open w-okada's own demo window. The window is part of VCClient. PacVoiceMod uses the engine's HTTP API behind it. The pinned 2.x package exposes a different conversion API from the legacy API currently implemented in PacVoiceMod. A demo window opening by itself does not establish compatibility. The app reports an API mismatch when it can identify one. Model conversion against the pinned Windows package still needs a compatible adapter.
+
 ## Local checks
 
 ```powershell

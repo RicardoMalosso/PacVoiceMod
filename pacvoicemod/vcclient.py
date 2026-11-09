@@ -12,7 +12,7 @@ import zipfile
 import requests
 from requests import Timeout
 
-from .engine import EngineUnavailable
+from .engine import EngineAPIError, EngineUnavailable
 
 SERVER = "MMVCServerSIO.exe"
 HTTP_LAUNCHERS = ("start_http.bat", "http_start.bat")
@@ -180,10 +180,23 @@ class LocalVCClient:
                     log_size = current_size
                     last_activity = now
                     status("VCClient is still setting up its modules and samples…")
+                    self.check_alternate_api(engine, port)
                 if now - started >= STARTUP_MAX_SECONDS or now - last_activity >= STARTUP_IDLE_SECONDS:
                     raise StartupError("VCClient did not respond at {address}. See {log}.",
                                        address=engine.base, log=self.log)
                 self.closed.wait(0.5)
+
+    @staticmethod
+    def check_alternate_api(engine, port):
+        if port == 18000:
+            return
+        try:
+            response = engine.http.get("http://127.0.0.1:18000/openapi.json",
+                                       timeout=0.5, allow_redirects=False)
+            if response.ok and "/api/voice-changer/convert_chunk" in response.json().get("paths", {}):
+                raise EngineAPIError("http://127.0.0.1:18000")
+        except requests.RequestException:
+            pass
 
     def close(self):
         self.closed.set()

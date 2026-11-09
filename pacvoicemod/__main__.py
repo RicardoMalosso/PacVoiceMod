@@ -9,7 +9,7 @@ from tkinter import filedialog, messagebox, ttk
 import webbrowser
 
 from .audio import Audio, SAMPLE_SECONDS, endpoints, play_sample, stop_playback
-from .engine import Engine, EngineUnavailable, RATE
+from .engine import Engine, EngineAPIError, EngineUnavailable, RATE
 from .locale import BUTTON_HELP, translate
 from .twitch import is_command, listen
 from .vcclient import BUILD, LocalVCClient, StartupError, launch_command
@@ -357,13 +357,16 @@ class App:
             except StartupError as exc:
                 self.events.put(("model", (None, exc.message, exc.details)))
                 return
+            except EngineAPIError as exc:
+                self.events.put(("model", (None, exc.message, {"address": exc.address})))
+                return
             except Exception as exc:
                 self.events.put(("model", (None, str(exc), {})))
                 return
             self.events.put(("model_status", ("Loading and warming the RVC voice…",)))
             try:
                 engine.prepare(weights, index)
-            except EngineUnavailable as exc:
+            except (EngineAPIError, EngineUnavailable) as exc:
                 self.events.put(("model", (None, exc.message, {"address": exc.address})))
             except Exception as exc:
                 self.events.put(("model", (None, str(exc), {})))

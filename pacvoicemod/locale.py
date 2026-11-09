@@ -1,4 +1,6 @@
 PT_BR = {
+    "VCClient answered at {address}, but this build uses a different API. PacVoiceMod requires the /info and /test endpoints.":
+        "O VCClient respondeu em {address}, mas esta versão usa outra API. O PacVoiceMod precisa das rotas /info e /test.",
     "VCClient is still setting up its modules and samples…":
         "O VCClient ainda está preparando seus módulos e amostras…",
     "Pause playback": "Pausar reprodução",
