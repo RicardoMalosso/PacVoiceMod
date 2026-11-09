@@ -57,6 +57,14 @@ def model_files(weights, index, directory):
         return files
 
 
+class EngineUnavailable(Exception):
+    message = "Cannot reach VCClient at {address}. Start its HTTP launcher and check the port."
+
+    def __init__(self, address):
+        self.address = address
+        super().__init__(self.message.format(address=address))
+
+
 class Engine:
     def __init__(self, port, slot):
         self.base = f"http://127.0.0.1:{port}"
@@ -65,8 +73,11 @@ class Engine:
         self.http.trust_env = False
 
     def request(self, method, path, timeout=5, **kwargs):
-        response = self.http.request(method, self.base + path, timeout=timeout,
-                                     allow_redirects=False, **kwargs)
+        try:
+            response = self.http.request(method, self.base + path, timeout=timeout,
+                                         allow_redirects=False, **kwargs)
+        except requests.ConnectionError as exc:
+            raise EngineUnavailable(self.base) from exc
         response.raise_for_status()
         if response.is_redirect:
             raise RuntimeError("VCClient must run over loopback HTTP.")

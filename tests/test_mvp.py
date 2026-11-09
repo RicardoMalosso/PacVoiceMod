@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import zipfile
 
 import numpy as np
+import requests
 
 try:
     from pacvoicemod import audio as audio_module
@@ -14,7 +15,7 @@ except OSError:
     # The tests exercise the callback without opening a hardware stream.
     with patch.dict(sys.modules, {"sounddevice": MagicMock()}):
         from pacvoicemod import audio as audio_module
-from pacvoicemod.engine import Engine, FRAMES, model_files
+from pacvoicemod.engine import Engine, EngineUnavailable, FRAMES, model_files
 from pacvoicemod.twitch import is_command
 
 
@@ -40,6 +41,12 @@ class ModelImportTests(unittest.TestCase):
                 archive.writestr("b.pth", b"b")
             with self.assertRaisesRegex(ValueError, "Multiple"):
                 model_files(source, None, root)
+
+    def test_engine_reports_connection_failure_with_the_configured_address(self):
+        engine = Engine(18889, 90)
+        with patch.object(engine.http, "request", side_effect=requests.ConnectionError):
+            with self.assertRaisesRegex(EngineUnavailable, "127.0.0.1:18889"):
+                engine.prepare()
 
     def test_engine_rejects_one_sample_error_response(self):
         engine = Engine(18888, 90)
@@ -76,6 +83,38 @@ class AudioTests(unittest.TestCase):
         self.audio.ends = time.monotonic() - 1
         self.audio.wet[1] = np.full(FRAMES, 200, dtype=np.int16)
         self.assertEqual(self.render(100), 100)
+
+    def test_sample_pairs_the_same_input_block_with_rendered_output(self):
+        self.assertTrue(self.audio.start_sample())
+        for value in (10, 20, 30, 40):
+            self.render(value)
+        self.audio.wet[0] = np.full(FRAMES, 200, dtype=np.int16)
+        self.assertEqual(self.render(50), 200)
+        self.audio.stop_sample()
+        original, output = self.audio.sample_tracks()[-1]
+        self.assertEqual(int(original[0]), 30)
+        self.assertEqual(int(output[0]), 200)
+        self.assertEqual(self.audio.sample_status(), (False, 3 * FRAMES, FRAMES))
+        self.assertIsNone(self.audio.requested)
+
+    def test_sample_stops_at_the_frame_limit(self):
+        self.audio.start_sample()
+        with patch.object(audio_module, "SAMPLE_FRAMES", FRAMES + 3):
+            for _ in range(4):
+                self.render(100)
+        self.assertEqual(self.audio.sample_status(), (False, FRAMES + 3, 0))
+        self.assertEqual(len(self.audio.sample_tracks()[-1][0]), 3)
+
+    def test_playback_sends_the_selected_track_to_the_selected_device(self):
+        dry = np.array([10, 20], dtype=np.int16)
+        wet = np.array([100, 200], dtype=np.int16)
+        with (patch.object(audio_module.sd, "query_devices",
+                           return_value={"max_output_channels": 2}),
+              patch.object(audio_module.sd, "WasapiSettings"),
+              patch.object(audio_module.sd, "play") as play):
+            audio_module.play_sample(((dry, wet),), 1, 42)
+        np.testing.assert_array_equal(play.call_args.args[0], [[100, 100], [200, 200]])
+        self.assertEqual(play.call_args.kwargs["device"], 42)
 
     def test_stalled_conversion_leaves_dry_mic_running(self):
         self.audio.activate(20)

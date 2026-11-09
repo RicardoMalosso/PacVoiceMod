@@ -8,19 +8,34 @@ import sounddevice as sd
 
 from .engine import FRAMES, RATE
 
+SAMPLE_SECONDS = 10
+SAMPLE_FRAMES = SAMPLE_SECONDS * RATE
+
 
 def endpoints():
     devices = sd.query_devices()
-    inputs, outputs = {}, {}
+    inputs, outputs, playback = {}, {}, {}
     for index, device in enumerate(devices):
         if sd.query_hostapis(device["hostapi"])["name"] != "Windows WASAPI":
             continue
         name = device["name"]
         if device["max_input_channels"] and "cable output" not in name.casefold():
             inputs[f"{name} [{index}]"] = index
-        if device["max_output_channels"] and "cable input" in name.casefold():
-            outputs[f"{name} [{index}]"] = index
-    return inputs, outputs
+        if device["max_output_channels"]:
+            choices = outputs if "cable input" in name.casefold() else playback
+            choices[f"{name} [{index}]"] = index
+    return inputs, outputs, playback
+
+
+def play_sample(blocks, track, device):
+    samples = np.concatenate([block[track] for block in blocks])
+    channels = min(2, sd.query_devices(device)["max_output_channels"])
+    output = np.repeat(samples[:, None], channels, axis=1)
+    sd.play(output, RATE, device=device, extra_settings=sd.WasapiSettings(auto_convert=True))
+
+
+def stop_playback():
+    sd.stop()
 
 
 class Audio:
@@ -36,6 +51,10 @@ class Audio:
         self.requested = None
         self.ends = None
         self.failures = 0
+        self.sample = []
+        self.sample_frames = 0
+        self.sample_converted_frames = 0
+        self.recording = False
         self.levels = (0, 0)
         self.dropouts = 0
         self.message = "Dry mic"
@@ -55,11 +74,42 @@ class Audio:
 
     def activate(self, duration):
         with self.lock:
-            if self.requested is None and not self.closed.is_set():
-                self.generation += 1
-                self.requested = time.monotonic()
-                self.duration = duration
-                self.message = "Waiting for converted audio"
+            if not self.recording and self.requested is None and not self.closed.is_set():
+                self.begin_effect(duration)
+
+    def begin_effect(self, duration):
+        self.generation += 1
+        self.requested = time.monotonic()
+        self.duration = duration
+        self.message = "Waiting for converted audio"
+
+    def start_sample(self):
+        with self.lock:
+            if self.recording or self.requested is not None or self.closed.is_set():
+                return False
+            self.sample = []
+            self.sample_frames = self.sample_converted_frames = 0
+            self.recording = True
+            self.begin_effect(SAMPLE_SECONDS)
+            return True
+
+    def stop_sample(self):
+        with self.lock:
+            self.finish_sample()
+
+    def finish_sample(self):
+        if self.recording:
+            self.recording = False
+            if self.requested is not None:
+                self.reset("Dry mic")
+
+    def sample_status(self):
+        with self.lock:
+            return self.recording, self.sample_frames, self.sample_converted_frames
+
+    def sample_tracks(self):
+        with self.lock:
+            return tuple(self.sample)
 
     def reset(self, message):
         self.generation += 1
@@ -70,6 +120,7 @@ class Audio:
 
     def cancel(self):
         with self.lock:
+            self.recording = False
             self.reset("Dry mic")
 
     def convert(self):
@@ -103,6 +154,7 @@ class Audio:
             sequence = self.sequence
             self.sequence += 1
             rendered = dry
+            converted = False
             if self.ends is not None and now >= self.ends:
                 self.reset("Dry mic")
             if self.requested is not None:
@@ -116,6 +168,7 @@ class Audio:
                         del self.wet[late]
                 if wet is not None:
                     rendered = wet
+                    converted = True
                     self.failures = 0
                     if self.ends is None:
                         self.ends = now + self.duration
@@ -126,6 +179,14 @@ class Audio:
                         self.reset("Conversion too slow. Dry mic restored.")
                 elif now - self.requested > 2:
                     self.reset("Conversion did not start. Dry mic restored.")
+            if self.recording:
+                count = min(frames, SAMPLE_FRAMES - self.sample_frames)
+                self.sample.append((dry[:count], rendered[:count]))
+                self.sample_frames += count
+                if converted:
+                    self.sample_converted_frames += count
+                if self.sample_frames >= SAMPLE_FRAMES:
+                    self.finish_sample()
             self.levels = tuple(int(np.max(np.abs(block.astype(np.int32)))) for block in (current, rendered))
         output_data[:] = rendered[:, None]
 

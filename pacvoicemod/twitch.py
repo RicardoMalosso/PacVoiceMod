@@ -17,7 +17,7 @@ def authorize(stop, status):
                              data={"client_id": CLIENT_ID, "scopes": "user:read:chat"})
     response.raise_for_status()
     device = response.json()
-    status(f"Enter {device['user_code']} in the Twitch browser tab.")
+    status("Enter {code} in the Twitch browser tab.", code=device["user_code"])
     webbrowser.open(device["verification_uri"])
     interval = device["interval"]
     deadline = time.monotonic() + device["expires_in"]
@@ -77,7 +77,7 @@ def listen(stop, status, trigger):
                          "condition": {"broadcaster_user_id": user_id, "user_id": user_id},
                          "transport": {"method": "websocket", "session_id": welcome["id"]}})
                 response.raise_for_status()
-                status(f"Listening to #{identity['login']}")
+                status("Listening to #{channel}", channel=identity["login"])
                 timeout = welcome.get("keepalive_timeout_seconds") or 30
                 last_message = time.monotonic()
                 while not stop.is_set():
@@ -118,5 +118,5 @@ def listen(stop, status, trigger):
         except requests.HTTPError:
             raise
         except (ConnectionClosed, OSError, TimeoutError) as exc:
-            status(f"Twitch disconnected. Retrying ({exc}).")
+            status("Twitch disconnected. Retrying ({error}).", error=exc)
             stop.wait(2)
