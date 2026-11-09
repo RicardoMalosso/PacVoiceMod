@@ -2,6 +2,24 @@
 
 PacVoiceMod is a planned Windows 11 voice changer for Twitch streamers. It will capture a physical microphone, apply voice effects locally, and send the result to OBS through a persistent virtual microphone. Between effects, OBS receives the streamer's normal voice.
 
+## MVP
+
+The first Windows build proves one complete path. Import one voice from [voice-models.com](https://voice-models.com/), route the physical mic through PacVoiceMod to OBS, and use a Twitch chat command to turn that voice on for a set duration.
+
+**Engine.** Start with the original [w-okada/voice-changer (VCClient)](https://github.com/w-okada/voice-changer), a widely used MIT-licensed real-time RVC implementation with roughly 21,000 GitHub stars. Smoke-test its official Windows CUDA build in local device mode on the GTX 1660 SUPER with a catalog download. Pin the revision and build that pass. Reuse its streaming conversion in the app's local worker.
+
+| Step | MVP behavior |
+| --- | --- |
+| Import one voice | Select a downloaded RVC v2 ZIP or an extracted `.pth` plus optional `.index`. Validate it, save it locally, and warm it before enabling the chat trigger. |
+| Set up audio | Select the physical mic, detect VB-CABLE, and open the official installer if needed. Show input and output meters. PacVoiceMod writes to **CABLE Input**. In OBS, add **Audio Input Capture** and select **CABLE Output** once. |
+| Connect Twitch | Sign in as the broadcaster using public-client Device Code login. Ship Client ID `sorb998iik1sbba6xfbqfr6e7pn9s1`. The registered `http://localhost` URL is unused by Device Code login. Request only `user:read:chat` and subscribe to `channel.chat.message` over EventSub WebSocket. |
+| Trigger the voice | Default to exact command `!voice` for 20 seconds, broadcaster and moderators only, with both settings configurable. Start the timer when converted audio reaches the output. Ignore repeat triggers while active in the MVP. A local test button works without Twitch. |
+| Return to normal | Send the dry mic through the same OBS source before and after the effect. Let the streamer cancel immediately. Return to dry audio if inference fails and keep the dry route working if Twitch disconnects. |
+
+**Acceptance test.** On Windows 11, import a real catalog download, speak into OBS with the dry mic, type the command in live Twitch chat, hear the converted voice in OBS, and verify automatic return to dry audio. Restart PacVoiceMod and OBS and repeat without reimporting the model or recreating the OBS source. Measure mic-to-OBS latency, dropouts, and peak VRAM while OBS is streaming.
+
+Bits, Channel Points, multiple presets, and automatic OBS source creation follow after this end-to-end test. The sections below describe the broader plan.
+
 ## Architecture
 
 - **Desktop app.** Use C# and WPF for the audio setup wizard, meters, effect presets, Twitch login, and a global return-to-normal hotkey.
@@ -45,7 +63,7 @@ Use [Twitch public-client device-code login](https://dev.twitch.tv/docs/authenti
 
 Send all three trigger types through the same effect controller. Start the timer when processed audio reaches the output, then return to the normal mic when it expires. Allow one active effect at a time. Repeated activations of the same voice can extend it up to a cap. Other effects wait in a bounded queue with expiry. Show the current voice, time remaining, and skipped or expired activations. Provide **Test Effect**, **Pause Triggers**, and **Return to Normal**. Return to Normal immediately clears the queue and bypasses the effect.
 
-Show **Ready**, **Paused**, or **Disconnected** and reconnect using [Twitch's WebSocket rules](https://dev.twitch.tv/docs/eventsub/handling-websocket-events/). Twitch can miss deliveries during a disconnect. The first release listens to existing Channel Points rewards. Streamers manage fulfillment and refunds in Twitch.
+Show **Ready**, **Paused**, or **Disconnected** and reconnect using [Twitch's WebSocket rules](https://dev.twitch.tv/docs/eventsub/handling-websocket-events/). Twitch can miss deliveries during a disconnect. The Channel Points milestone listens to existing custom rewards. Streamers manage fulfillment and refunds in Twitch.
 
 ## Milestones
 
