@@ -13,15 +13,15 @@
 
    This PyTorch install is for restricted checkpoint validation. VCClient supplies its own CUDA runtime for conversion.
 3. On your first **Import voice**, PacVoiceMod downloads the [official VCClient Windows CUDA build](https://huggingface.co/wok000/vcclient000/blob/1679ae1848c3cfdd11388626b1733bb782065156/vcclient_win_cuda_2.0.65-beta.zip), shows download progress, checks its SHA-256, and extracts it into `PacVoiceMod/runtime/`. The download is about 3 GB and requires additional free space for extraction. PacVoiceMod starts VCClient and continues the import when the engine responds. If you already have an extracted copy, use **Use existing VCClient folder** before importing to skip the download.
-4. Install [VB-CABLE](https://vb-audio.com/Cable/index.htm) using its administrator setup and reboot. The app's **Get VB-CABLE** button opens the official download page.
+4. For live output to OBS, install [VB-CABLE](https://vb-audio.com/Cable/index.htm) using its administrator setup and reboot. The app's **Get VB-CABLE** button opens the official download page.
 
 ## Connect the mic, voice, and chat
 
 Use **For initial testing** and **For streaming to OBS** in the checklist on the right to track setup. The checkboxes are reminders only and do not change any settings. The buttons at the top switch between Brazilian Portuguese (🇧🇷) and US English (🇨🇦). PacVoiceMod saves your language and checked steps.
 
-1. Launch `.\.venv\Scripts\python.exe -m pacvoicemod` from the repo root. Select your physical microphone and **CABLE Input**.
+1. Launch `.\.venv\Scripts\python.exe -m pacvoicemod` from the repo root. Select your physical microphone. Choose **CABLE Input** if you want live output to OBS.
 2. Download a trusted RVC ZIP from [voice-models.com](https://voice-models.com/) and put it in **`PacVoiceMod/models/`** (for example, `PacVoiceMod/models/my-voice.zip`). Leave it zipped. **Import voice** opens that folder, and you can also browse to Downloads or any other folder. Import a ZIP with one model, or pick an extracted `.pth` and optionally its matching `.index`. If the archive has several candidates, extract it yourself and pick the pair. Model imports replace the configured VCClient slot. Checkpoint validation uses restricted loading. Import indexes only from a publisher you trust because VCClient parses them with its native FAISS loader.
-3. Click **Start audio**. In OBS, add an **Audio Input Capture** source and select **CABLE Output**. Disable any duplicate raw mic capture in OBS. Confirm dry audio in OBS, then click **Test voice** and speak.
+3. Click **Start audio**. For local testing, record and play a sample in PacVoiceMod. For streaming, in OBS, add an **Audio Input Capture** source and select **CABLE Output**. Disable any duplicate raw mic capture in OBS. Confirm dry audio in OBS, then click **Test voice** and speak.
 4. Click **Connect Twitch** and complete Device Code login in the browser as your channel owner. Type `!voice` in that channel as the broadcaster or a moderator. The effect defaults to 20 seconds and returns to the dry mic afterward. Use **Return to normal** to end it immediately.
 5. On restart, PacVoiceMod starts VCClient and loads the saved slot automatically. Click **Start audio** and reconnect Twitch. OBS keeps the same source. Twitch credentials stay in memory for the session.
 
@@ -29,9 +29,9 @@ This build uses Python/Tkinter and a local VCClient process managed by the app. 
 
 ## Record and compare a sample
 
-1. Load a voice and click **Start audio**. Select your headphones under **Sample recorder**.
-2. Click **Record sample** and speak. This enables the loaded voice for the test and records both the original mic and the corresponding audio sent to the virtual cable. Click **Stop recording** when done, or let it stop at 10 seconds.
-3. Click **Play original** or **Play output** to compare the same take through the selected headphones or speakers. The status shows how much of the take was converted. The output recording includes dry audio whenever conversion fell back to the original mic.
+1. Load a voice and click **Start audio**. Select your headphones under **Sample recorder**. Local recording and playback work without VB-CABLE.
+2. Click **Record sample** and speak. This enables the loaded voice for the test and records both the original mic and the corresponding processed output (also sent to the virtual cable if selected). Click **Stop recording** when done, or let it stop at 10 seconds.
+3. Click **Play original** or **Play output** to compare the same take through the selected headphones or speakers. The two tracks share a seek bar. Switch tracks to hear the other version from the same point, pause to keep your position, or stop to return to the beginning. The status shows how much of the take was converted. The output recording includes dry audio whenever conversion fell back to the original mic.
 
 The latest take is kept in memory until you record again or close PacVoiceMod. You can stop live audio and still play it back.
 

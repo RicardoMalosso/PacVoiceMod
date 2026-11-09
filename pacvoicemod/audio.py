@@ -27,11 +27,12 @@ def endpoints():
     return inputs, outputs, playback
 
 
-def play_sample(blocks, track, device):
+def play_sample(blocks, track, device, start_frame=0):
     samples = np.concatenate([block[track] for block in blocks])
     channels = min(2, sd.query_devices(device)["max_output_channels"])
-    output = np.repeat(samples[:, None], channels, axis=1)
+    output = np.repeat(samples[start_frame:, None], channels, axis=1)
     sd.play(output, RATE, device=device, extra_settings=sd.WasapiSettings(auto_convert=True))
+    return sd.get_stream()
 
 
 def stop_playback():
@@ -58,12 +59,16 @@ class Audio:
         self.levels = (0, 0)
         self.dropouts = 0
         self.message = "Dry mic"
-        self.channels = min(2, sd.query_devices(output)["max_output_channels"])
-        self.stream = sd.Stream(device=(mic, output), samplerate=RATE, blocksize=FRAMES,
-                                channels=(1, self.channels), dtype="int16",
-                                extra_settings=(sd.WasapiSettings(auto_convert=True),
-                                                sd.WasapiSettings(auto_convert=True)),
-                                callback=self.callback)
+        settings = sd.WasapiSettings(auto_convert=True)
+        if output is None:
+            self.stream = sd.InputStream(device=mic, samplerate=RATE, blocksize=FRAMES,
+                                         channels=1, dtype="int16", extra_settings=settings,
+                                         callback=self.local_callback)
+        else:
+            channels = min(2, sd.query_devices(output)["max_output_channels"])
+            self.stream = sd.Stream(device=(mic, output), samplerate=RATE, blocksize=FRAMES,
+                                    channels=(1, channels), dtype="int16",
+                                    extra_settings=(settings, settings), callback=self.callback)
         try:
             self.stream.start()
         except Exception:
@@ -141,13 +146,22 @@ class Audio:
                     self.wet[sequence] = np.frombuffer(converted, dtype="<i2")
 
     def callback(self, input_data, output_data, frames, timing, status):
+        rendered = self.process(input_data, frames, status)
+        if rendered is None:
+            output_data.fill(0)
+        else:
+            output_data[:] = rendered[:, None]
+
+    def local_callback(self, input_data, frames, timing, status):
+        self.process(input_data, frames, status)
+
+    def process(self, input_data, frames, status):
         if status:
             self.dropouts += 1
         current = input_data[:, 0].copy()
         self.dry.append(current)
         if len(self.dry) <= 2:
-            output_data.fill(0)
-            return
+            return None
         dry = self.dry.popleft()
         now = time.monotonic()
         with self.lock:
@@ -188,7 +202,7 @@ class Audio:
                 if self.sample_frames >= SAMPLE_FRAMES:
                     self.finish_sample()
             self.levels = tuple(int(np.max(np.abs(block.astype(np.int32)))) for block in (current, rendered))
-        output_data[:] = rendered[:, None]
+        return rendered
 
     def close(self):
         self.closed.set()

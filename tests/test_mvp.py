@@ -155,6 +155,22 @@ class AudioTests(unittest.TestCase):
         self.audio.wet[1] = np.full(FRAMES, 200, dtype=np.int16)
         self.assertEqual(self.render(100), 100)
 
+    def test_local_recording_opens_only_the_microphone(self):
+        with (patch.object(audio_module.sd, "InputStream") as input_stream,
+              patch.object(audio_module.sd, "Stream") as duplex_stream):
+            local = audio_module.Audio(MagicMock(), 5, None)
+            try:
+                self.assertEqual(input_stream.call_args.kwargs["device"], 5)
+                duplex_stream.assert_not_called()
+                self.assertTrue(local.start_sample())
+                source = np.full((FRAMES, 1), 100, dtype=np.int16)
+                for _ in range(3):
+                    local.local_callback(source, FRAMES, None, False)
+                local.stop_sample()
+                self.assertEqual(local.sample_status()[1], FRAMES)
+            finally:
+                local.close()
+
     def test_sample_pairs_the_same_input_block_with_rendered_output(self):
         self.assertTrue(self.audio.start_sample())
         for value in (10, 20, 30, 40):
@@ -182,9 +198,10 @@ class AudioTests(unittest.TestCase):
         with (patch.object(audio_module.sd, "query_devices",
                            return_value={"max_output_channels": 2}),
               patch.object(audio_module.sd, "WasapiSettings"),
+              patch.object(audio_module.sd, "get_stream"),
               patch.object(audio_module.sd, "play") as play):
-            audio_module.play_sample(((dry, wet),), 1, 42)
-        np.testing.assert_array_equal(play.call_args.args[0], [[100, 100], [200, 200]])
+            audio_module.play_sample(((dry, wet),), 1, 42, start_frame=1)
+        np.testing.assert_array_equal(play.call_args.args[0], [[200, 200]])
         self.assertEqual(play.call_args.kwargs["device"], 42)
 
     def test_stalled_conversion_leaves_dry_mic_running(self):

@@ -3,13 +3,14 @@ import os
 from pathlib import Path
 from queue import Empty, SimpleQueue
 from threading import Event, Thread
+import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import webbrowser
 
 from .audio import Audio, SAMPLE_SECONDS, endpoints, play_sample, stop_playback
 from .engine import Engine, EngineUnavailable, RATE
-from .locale import translate
+from .locale import BUTTON_HELP, translate
 from .twitch import is_command, listen
 from .vcclient import BUILD, LocalVCClient, StartupError, launch_command
 
@@ -45,6 +46,43 @@ def language_flags():
     return brazil, canada
 
 
+def add_tooltip(widget, get_text):
+    pending = None
+    popup = None
+
+    def hide(_event=None):
+        nonlocal pending, popup
+        if pending is not None:
+            widget.after_cancel(pending)
+            pending = None
+        if popup is not None:
+            popup.destroy()
+            popup = None
+
+    def show():
+        nonlocal pending, popup
+        pending = None
+        popup = tk.Toplevel(widget)
+        popup.wm_overrideredirect(True)
+        ttk.Label(popup, text=get_text(), wraplength=320, padding=8,
+                  relief="solid").pack()
+        popup.update_idletasks()
+        x = min(widget.winfo_rootx(), widget.winfo_screenwidth() - popup.winfo_reqwidth())
+        y = widget.winfo_rooty() + widget.winfo_height() + 3
+        if y + popup.winfo_reqheight() > widget.winfo_screenheight():
+            y = widget.winfo_rooty() - popup.winfo_reqheight() - 3
+        popup.wm_geometry(f"+{max(0, x)}+{max(0, y)}")
+
+    def schedule(_event):
+        nonlocal pending
+        hide()
+        pending = widget.after(500, show)
+
+    widget.bind("<Enter>", schedule, add="+")
+    for event in ("<Leave>", "<ButtonPress>", "<Destroy>"):
+        widget.bind(event, hide, add="+")
+
+
 class App:
     def __init__(self, root):
         self.root = root
@@ -55,6 +93,11 @@ class App:
         self.events = SimpleQueue()
         self.devices = {}
         self.playback_devices = {}
+        self.player_stream = None
+        self.player_track = 0
+        self.player_start = 0.0
+        self.player_started_at = 0.0
+        self.seeking = False
         self.last_sample = ()
         self.last_sample_status = (False, 0, 0)
         try:
@@ -73,8 +116,10 @@ class App:
         languages.grid(row=0, columnspan=2, sticky="w")
         self.flags = language_flags()
         for icon, name, language in zip(self.flags, ("Português", "English"), ("pt-BR", "en-US")):
-            ttk.Button(languages, text=name, image=icon, compound="left",
-                       command=lambda selected=language: self.set_language(selected)).pack(side="left")
+            button = ttk.Button(languages, text=name, image=icon, compound="left",
+                                command=lambda selected=language: self.set_language(selected))
+            self.button_tooltip(button, name)
+            button.pack(side="left")
         panel = ttk.Frame(root, padding=14)
         panel.grid(row=1, column=0, sticky="nsew")
         panel.columnconfigure(1, weight=1)
@@ -132,13 +177,21 @@ class App:
         self.playback_outputs.grid(row=0, column=1, columnspan=2, sticky="ew")
         for index, (label, action) in enumerate([
             ("Record sample", self.record_sample), ("Stop recording", self.stop_sample),
-            ("Stop playback", stop_playback), ("Play original", lambda: self.play(0)),
-            ("Play output", lambda: self.play(1)),
+            ("Stop playback", self.stop_player), ("Play original", lambda: self.play(0)),
+            ("Play output", lambda: self.play(1)), ("Pause playback", self.pause_player),
         ]):
             self.localized(ttk.Button, recorder, label, command=action).grid(
                 row=1 + index // 3, column=index % 3, sticky="ew", padx=2, pady=2)
+        self.position = tk.DoubleVar(value=0)
+        self.timeline = ttk.Scale(recorder, from_=0, to=1, variable=self.position, state="disabled")
+        self.timeline.grid(row=3, columnspan=3, sticky="ew", pady=(5, 0))
+        self.timeline.bind("<ButtonPress-1>", self.begin_seek)
+        for event in ("<ButtonRelease-1>", "<KeyRelease-Left>", "<KeyRelease-Right>"):
+            self.timeline.bind(event, self.end_seek)
+        self.player_status = tk.StringVar()
+        ttk.Label(recorder, textvariable=self.player_status).grid(row=4, columnspan=3, sticky="w")
         ttk.Label(recorder, textvariable=self.sample_status, wraplength=520).grid(
-            row=3, columnspan=3, sticky="w")
+            row=5, columnspan=3, sticky="w")
         self.progress = ttk.Progressbar(panel, maximum=100)
         self.progress.grid(row=14, columnspan=2, sticky="ew", pady=(8, 0))
         self.progress.grid_remove()
@@ -152,14 +205,15 @@ class App:
                        wraplength=290).pack(anchor="w", pady=(0, 6))
         sections = [
             ("For initial testing", [
-                ("cable", "Install VB-CABLE and reboot"),
                 ("engine", "Let PacVoiceMod install VCClient CUDA"),
                 ("model", "Import a voice ZIP from models/"),
-                ("devices", "Select your mic and CABLE Input"),
+                ("test_devices", "Select your mic and headphones"),
                 ("record", "Start audio and record a test"),
                 ("playback", "Play the original and processed samples"),
             ]),
             ("For streaming to OBS", [
+                ("cable", "Install VB-CABLE and reboot"),
+                ("devices", "Select CABLE Input in PacVoiceMod"),
                 ("obs", "Select CABLE Output in OBS"),
                 ("obs_raw_mic", "Mute the duplicate raw mic in OBS"),
                 ("twitch", "Connect Twitch and test the chat command"),
@@ -170,7 +224,13 @@ class App:
             for key, step in steps:
                 checked = tk.BooleanVar(value=saved.get("checklist", {}).get(key, False))
                 self.checklist[key] = checked
-                self.localized(ttk.Checkbutton, setup, step, variable=checked).pack(anchor="w", pady=2)
+                checkbox = self.localized(ttk.Checkbutton, setup, step, variable=checked)
+                if key == "cable":
+                    self.button_tooltip(checkbox, "Get VB-CABLE")
+                else:
+                    add_tooltip(checkbox, lambda: self.tr(
+                        "Checkboxes are reminders only. They do not change any settings."))
+                checkbox.pack(anchor="w", pady=2)
         for status in (self.audio_status, self.model_status, self.twitch_status, self.sample_status):
             self.set_status(status, status.get())
         self.refresh()
@@ -184,7 +244,12 @@ class App:
     def localized(self, widget_type, parent, message, **options):
         widget = widget_type(parent, text=self.tr(message), **options)
         self.localized_widgets.append((widget, message))
+        if message in BUTTON_HELP:
+            self.button_tooltip(widget, message)
         return widget
+
+    def button_tooltip(self, widget, name):
+        add_tooltip(widget, lambda: BUTTON_HELP[name][int(self.language == "pt-BR")])
 
     def set_status(self, variable, message, **values):
         self.localized_statuses[str(variable)] = (variable, message, values)
@@ -214,8 +279,8 @@ class App:
                 matches = [item for item in choices if item.rsplit(" [", 1)[0] == name]
                 variable.set(matches[0] if len(matches) == 1 else
                              next(iter(choices)) if len(choices) == 1 else "")
-        if not outputs:
-            self.set_status(self.audio_status, "CABLE Input missing. Install VB-CABLE, reboot, then refresh.")
+        if not outputs and not self.audio:
+            self.set_status(self.audio_status, "Local recording is available. Install VB-CABLE only for OBS.")
 
     def save(self):
         values = {key: getattr(self, key).get() for key in
@@ -311,7 +376,7 @@ class App:
             return
         try:
             self.save()
-            self.audio = Audio(self.engine, self.devices[self.mic.get()], self.devices[self.output.get()])
+            self.audio = Audio(self.engine, self.devices[self.mic.get()], self.devices.get(self.output.get()))
         except Exception as exc:
             self.set_status(self.audio_status, "Audio could not start. Check mic and cable selections. {error}", error=exc)
 
@@ -327,10 +392,10 @@ class App:
         if not self.audio or not self.engine:
             messagebox.showinfo(self.tr("Sample"), self.tr("Load a voice and start audio first."))
             return
-        stop_playback()
         if not self.audio.start_sample():
             messagebox.showinfo(self.tr("Sample"), self.tr("Wait for the current effect or recording to finish."))
             return
+        self.stop_player()
         self.last_sample = ()
         self.last_sample_status = (False, 0, 0)
 
@@ -345,7 +410,34 @@ class App:
             self.last_sample = self.audio.sample_tracks()
             self.last_sample_status = status
 
-    def play(self, track):
+    def begin_seek(self, _event):
+        self.seeking = True
+
+    def end_seek(self, _event):
+        self.seeking = False
+        if self.player_stream is not None:
+            self.play(self.player_track, self.position.get())
+
+    def update_player_position(self):
+        if self.player_stream is None:
+            return
+        duration = self.last_sample_status[1] / RATE
+        if not self.player_stream.active:
+            self.player_stream = None
+            self.position.set(duration)
+        else:
+            self.position.set(min(duration, self.player_start + time.monotonic() - self.player_started_at))
+
+    def pause_player(self):
+        self.update_player_position()
+        stop_playback()
+        self.player_stream = None
+
+    def stop_player(self):
+        self.pause_player()
+        self.position.set(0)
+
+    def play(self, track, position=None):
         if self.audio and self.audio.sample_status()[0]:
             messagebox.showinfo(self.tr("Playback"), self.tr("Stop recording first."))
             return
@@ -359,7 +451,18 @@ class App:
             messagebox.showinfo(self.tr("Playback"), self.tr("Select your headphones or speakers."))
             return
         try:
-            play_sample(self.last_sample, track, device)
+            if position is None:
+                self.update_player_position()
+                position = self.position.get()
+            duration = self.last_sample_status[1] / RATE
+            if position >= duration:
+                position = 0
+            self.player_stream = None
+            self.player_stream = play_sample(self.last_sample, track, device, int(position * RATE))
+            self.player_start = position
+            self.player_started_at = time.monotonic()
+            self.player_track = track
+            self.position.set(position)
         except Exception as exc:
             messagebox.showerror(self.tr("Playback"), str(exc))
 
@@ -463,6 +566,14 @@ class App:
                 self.set_status(self.meters, "Mic {mic}% · Output {output}% · Audio buffer warnings {warnings}",
                                 mic=left * 100 // 32768, output=right * 100 // 32768,
                                 warnings=self.audio.dropouts)
+        if self.audio:
+            self.remember_sample()
+        duration = self.last_sample_status[1] / RATE
+        self.timeline.configure(state="normal" if duration else "disabled", to=duration or 1)
+        if not self.seeking:
+            self.update_player_position()
+        track = self.tr("Original" if self.player_track == 0 else "Processed output")
+        self.player_status.set(f"{track} · {self.position.get():.1f} / {duration:.1f} s" if duration else "")
         recording, frames, converted = self.audio.sample_status() if self.audio else (False, 0, 0)
         if recording:
             self.set_status(self.sample_status, "Recording {seconds:.1f} / {limit} s", seconds=frames / RATE, limit=SAMPLE_SECONDS)
@@ -477,7 +588,7 @@ class App:
         self.root.after(100, self.poll)
 
     def close(self):
-        stop_playback()
+        self.stop_player()
         self.disconnect_twitch()
         self.stop_audio()
         self.vcclient.close()

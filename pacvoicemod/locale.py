@@ -1,4 +1,11 @@
 PT_BR = {
+    "Pause playback": "Pausar reprodução",
+    "Original": "Original",
+    "Processed output": "Saída processada",
+    "Select your mic and headphones": "Selecione o microfone e os fones",
+    "Select CABLE Input in PacVoiceMod": "Selecione CABLE Input no PacVoiceMod",
+    "Local recording is available. Install VB-CABLE only for OBS.":
+        "A gravação local está disponível. Instale o VB-CABLE apenas para usar o OBS.",
     "For initial testing": "Para o teste inicial",
     "For streaming to OBS": "Para transmitir pelo OBS",
     "Checkboxes are reminders only. They do not change any settings.":
@@ -118,3 +125,78 @@ PT_BR = {
 def translate(language, message, **values):
     template = PT_BR.get(message, message) if language == "pt-BR" else message
     return template.format(**values) if values else template
+
+
+BUTTON_HELP = {
+    "Português": ("Switch the app to Brazilian Portuguese.", "Muda o aplicativo para português do Brasil."),
+    "English": ("Switch the app to US English.", "Muda o aplicativo para inglês dos Estados Unidos."),
+    "Broadcaster and moderators only": (
+        "Only the broadcaster and moderators can trigger the voice through chat.",
+        "Somente o streamer e os moderadores podem ativar a voz pelo chat.",
+    ),
+    "Refresh devices": (
+        "Update the list after plugging in a mic or headphones, or installing VB-CABLE.",
+        "Atualiza a lista após conectar um microfone ou fone, ou instalar o VB-CABLE.",
+    ),
+    "Get VB-CABLE": (
+        "Opens the VB-CABLE download page. Only needed to send live audio to OBS. You can record and play samples without it.",
+        "Abre a página de download do VB-CABLE. Só é necessário para enviar áudio ao vivo ao OBS. Dá para gravar e ouvir amostras sem ele.",
+    ),
+    "Import voice": (
+        "Choose a downloaded voice ZIP or checkpoint. The app installs VCClient if needed and saves the voice in the selected model slot.",
+        "Selecione um ZIP ou checkpoint de voz. O app instala o VCClient se necessário e salva a voz no slot selecionado.",
+    ),
+    "Load saved slot": (
+        "Reloads the voice already stored in the numbered VCClient slot above, usually 90. Use this to reuse an imported voice without choosing its ZIP again.",
+        "Recarrega a voz já guardada no slot numerado do VCClient acima, normalmente o 90. Use para reutilizar uma voz importada sem selecionar o ZIP de novo.",
+    ),
+    "Use existing VCClient folder": (
+        "Choose a VCClient installation you already extracted to skip the automatic download.",
+        "Selecione uma instalação do VCClient que você já extraiu para pular o download automático.",
+    ),
+    "Start audio": (
+        "Starts capturing the selected microphone. With CABLE Input selected, live audio also goes to OBS.",
+        "Começa a capturar o microfone selecionado. Com CABLE Input selecionado, o áudio ao vivo também vai para o OBS.",
+    ),
+    "Stop audio": (
+        "Stops microphone capture and live output. Your latest sample remains available to play.",
+        "Para a captura do microfone e a saída ao vivo. A última amostra continua disponível para reprodução.",
+    ),
+    "Connect Twitch": (
+        "Opens Twitch sign-in in your browser, then listens for your configured chat command.",
+        "Abre o login da Twitch no navegador e passa a ouvir o comando configurado no chat.",
+    ),
+    "Disconnect Twitch": (
+        "Stops listening to Twitch chat. Local audio and samples keep working.",
+        "Para de ouvir o chat da Twitch. O áudio local e as amostras continuam funcionando.",
+    ),
+    "Test voice": (
+        "Turns on the loaded voice for the configured duration. Use Record sample to hear the result locally.",
+        "Ativa a voz carregada pela duração configurada. Use Gravar amostra para ouvir o resultado no app.",
+    ),
+    "Return to normal": (
+        "Ends the current voice effect immediately and returns to the original microphone.",
+        "Encerra o efeito de voz imediatamente e volta ao áudio original do microfone.",
+    ),
+    "Record sample": (
+        "Turns on the loaded voice and records up to 10 seconds of the original mic and the matching processed output.",
+        "Ativa a voz carregada e grava até 10 segundos do microfone original e da saída processada correspondente.",
+    ),
+    "Stop recording": (
+        "Finishes the current take so you can play both tracks.",
+        "Encerra a gravação atual para você ouvir as duas faixas.",
+    ),
+    "Stop playback": ("Stops playback and returns to the start.", "Para a reprodução e volta ao início."),
+    "Pause playback": (
+        "Pauses the sample at the current position. Play either track to resume there.",
+        "Pausa a amostra na posição atual. Reproduza qualquer faixa para continuar dali.",
+    ),
+    "Play original": (
+        "Plays the unmodified microphone track from the latest take.",
+        "Reproduz a faixa do microfone sem efeito da última gravação.",
+    ),
+    "Play output": (
+        "Plays the matching output from the latest take, including any fallback to the original mic.",
+        "Reproduz a saída correspondente da última gravação, incluindo trechos em que o app voltou ao microfone original.",
+    ),
+}
