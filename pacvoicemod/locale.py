@@ -1,4 +1,13 @@
 PT_BR = {
+    "Set up VCClient": "Configurar VCClient",
+    "Choose the extracted VCClient CUDA folder": "Selecione a pasta extraída do VCClient CUDA",
+    "Choose the extracted VCClient CUDA folder.": "Selecione a pasta extraída do VCClient CUDA.",
+    "Select the extracted VCClient folder containing its HTTP launcher.":
+        "Selecione a pasta extraída do VCClient que contém o inicializador HTTP.",
+    "Starting VCClient…": "Iniciando o VCClient…",
+    "VCClient exited during startup. See {log}.": "O VCClient fechou durante a inicialização. Consulte {log}.",
+    "VCClient did not respond at {address}. See {log}.":
+        "O VCClient não respondeu em {address}. Consulte {log}.",
     "Cannot reach VCClient at {address}. Start its HTTP launcher and check the port.":
         "Não foi possível acessar o VCClient em {address}. Inicie-o em modo HTTP e confira a porta.",
     "Microphone": "Microfone",

@@ -17,6 +17,7 @@ except OSError:
         from pacvoicemod import audio as audio_module
 from pacvoicemod.engine import Engine, EngineUnavailable, FRAMES, model_files
 from pacvoicemod.twitch import is_command
+from pacvoicemod.vcclient import LocalVCClient, launch_command
 
 
 class ModelImportTests(unittest.TestCase):
@@ -53,6 +54,43 @@ class ModelImportTests(unittest.TestCase):
         with patch.object(engine, "request", return_value={"changedVoiceBase64": "AAA="}):
             with self.assertRaisesRegex(RuntimeError, "block length"):
                 engine.convert(bytes(FRAMES * 2))
+
+
+class VCClientStartupTests(unittest.TestCase):
+    def test_existing_server_is_reused(self):
+        engine = MagicMock()
+        with patch("pacvoicemod.vcclient.subprocess.Popen") as launch:
+            LocalVCClient(Path("unused.log")).ensure_running(engine, None, 18888, MagicMock())
+        launch.assert_not_called()
+
+    def test_launches_server_on_configured_port_and_waits_for_readiness(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary)
+            server = folder / "MMVCServerSIO.exe"
+            server.touch()
+            log = folder / "vcclient.log"
+            engine = MagicMock()
+            unavailable = EngineUnavailable("http://127.0.0.1:18889")
+            engine.request.side_effect = [unavailable, unavailable, {"gpus": []}]
+            started = MagicMock()
+            manager = LocalVCClient(log)
+            with (patch("pacvoicemod.vcclient.subprocess.CREATE_NO_WINDOW", 0, create=True),
+                  patch("pacvoicemod.vcclient.subprocess.Popen") as launch,
+                  patch.object(manager.closed, "wait")):
+                launch.return_value.poll.return_value = None
+                manager.ensure_running(engine, folder, 18889, started)
+            launch.assert_called_once()
+            self.assertEqual(launch.call_args.args[0],
+                             [str(server), "--host", "127.0.0.1", "-p", "18889"])
+            self.assertEqual(launch.call_args.kwargs["cwd"], folder)
+            self.assertEqual(engine.request.call_count, 3)
+            started.assert_called_once()
+
+    def test_batch_launcher_runs_from_its_own_folder(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary)
+            (folder / "start_http.bat").touch()
+            self.assertEqual(launch_command(folder, 18888)[-3:], ["/d", "/c", "start_http.bat"])
 
 
 class AudioTests(unittest.TestCase):

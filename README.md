@@ -4,7 +4,7 @@ PacVoiceMod is a planned Windows 11 voice changer for Twitch streamers. It will 
 
 ## MVP
 
-The first implementation is available as a Windows source build. See [MVP setup](MVP-SETUP.md) for prerequisites and the mic-to-OBS test. This build uses Python/Tkinter and connects to VCClient as a separate loopback process.
+The first implementation is available as a Windows source build. See [MVP setup](MVP-SETUP.md) for prerequisites and the mic-to-OBS test. This build uses Python/Tkinter and starts and manages VCClient as a local loopback process after you select its extracted folder.
 
 The first Windows build proves one complete path. Import one voice from [voice-models.com](https://voice-models.com/), route the physical mic through PacVoiceMod to OBS, and use a Twitch chat command to turn that voice on for a set duration.
 
