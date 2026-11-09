@@ -1,4 +1,15 @@
 PT_BR = {
+    "Use existing VCClient folder": "Usar pasta existente do VCClient",
+    "VCClient installs automatically when you import a voice.":
+        "O VCClient será instalado automaticamente ao importar uma voz.",
+    "Let PacVoiceMod install VCClient CUDA": "Aguarde a instalação automática do VCClient CUDA",
+    "Downloading VCClient CUDA (about 3 GB)…": "Baixando o VCClient CUDA (cerca de 3 GB)…",
+    "Extracting VCClient CUDA…": "Extraindo o VCClient CUDA…",
+    "VCClient download failed its checksum. Retry to download a fresh copy.":
+        "Falha na verificação do download do VCClient. Tente baixar novamente.",
+    "VCClient archive contains an invalid file path.": "O arquivo do VCClient contém um caminho inválido.",
+    "VCClient archive does not contain a supported HTTP launcher.":
+        "O arquivo do VCClient não contém um inicializador HTTP compatível.",
     "Set up VCClient": "Configurar VCClient",
     "Choose the extracted VCClient CUDA folder": "Selecione a pasta extraída do VCClient CUDA",
     "Choose the extracted VCClient CUDA folder.": "Selecione a pasta extraída do VCClient CUDA.",

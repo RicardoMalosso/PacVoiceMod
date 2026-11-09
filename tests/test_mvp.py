@@ -1,3 +1,5 @@
+import hashlib
+from io import BytesIO
 from pathlib import Path
 import tempfile
 import sys
@@ -17,7 +19,8 @@ except OSError:
         from pacvoicemod import audio as audio_module
 from pacvoicemod.engine import Engine, EngineUnavailable, FRAMES, model_files
 from pacvoicemod.twitch import is_command
-from pacvoicemod.vcclient import LocalVCClient, launch_command
+from pacvoicemod.vcclient import LocalVCClient, StartupError, install_vcclient, launch_command
+from threading import Event
 
 
 class ModelImportTests(unittest.TestCase):
@@ -57,6 +60,32 @@ class ModelImportTests(unittest.TestCase):
 
 
 class VCClientStartupTests(unittest.TestCase):
+    def test_download_is_verified_extracted_and_reused(self):
+        archive = BytesIO()
+        with zipfile.ZipFile(archive, "w") as package:
+            package.writestr("nested/MMVCServerSIO.exe", b"example")
+        payload = archive.getvalue()
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "runtime" / "build"
+            with (patch("pacvoicemod.vcclient.BUILD_SHA256", hashlib.sha256(payload).hexdigest()),
+                  patch("pacvoicemod.vcclient.requests.get") as download):
+                response = download.return_value.__enter__.return_value
+                response.iter_content.return_value = [payload]
+                folder = install_vcclient(destination, Event(), MagicMock())
+                self.assertEqual(folder, destination / "nested")
+                self.assertEqual((folder / "MMVCServerSIO.exe").read_bytes(), b"example")
+                self.assertEqual(install_vcclient(destination, Event(), MagicMock()), folder)
+                download.assert_called_once()
+
+    def test_invalid_download_is_not_installed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "build"
+            with patch("pacvoicemod.vcclient.requests.get") as download:
+                download.return_value.__enter__.return_value.iter_content.return_value = [b"bad"]
+                with self.assertRaisesRegex(StartupError, "checksum"):
+                    install_vcclient(destination, Event(), MagicMock())
+            self.assertFalse(destination.exists())
+
     def test_existing_server_is_reused(self):
         engine = MagicMock()
         with patch("pacvoicemod.vcclient.subprocess.Popen") as launch:
@@ -84,7 +113,7 @@ class VCClientStartupTests(unittest.TestCase):
                              [str(server), "--host", "127.0.0.1", "-p", "18889"])
             self.assertEqual(launch.call_args.kwargs["cwd"], folder)
             self.assertEqual(engine.request.call_count, 3)
-            started.assert_called_once()
+            started.assert_called_once_with("Starting VCClient…")
 
     def test_batch_launcher_runs_from_its_own_folder(self):
         with tempfile.TemporaryDirectory() as temporary:

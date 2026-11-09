@@ -12,7 +12,7 @@
    ```
 
    This PyTorch install is for restricted checkpoint validation. VCClient supplies its own CUDA runtime for conversion.
-3. Extract the official [VCClient Windows CUDA build](https://huggingface.co/wok000/vcclient000/blob/1679ae1848c3cfdd11388626b1733bb782065156/vcclient_win_cuda_2.0.65-beta.zip) into a folder of your choice. In PacVoiceMod, click **Set up VCClient** and select the extracted folder containing `MMVCServerSIO.exe` or the HTTP launcher. PacVoiceMod remembers the folder and starts the engine automatically on launch or when importing if it is offline. It reuses a compatible server already running on the configured loopback port. PacVoiceMod uses a dedicated model slot, 90 by default, and sends PCM over loopback HTTP. Do not expose the VCClient server to the network.
+3. On your first **Import voice**, PacVoiceMod downloads the [official VCClient Windows CUDA build](https://huggingface.co/wok000/vcclient000/blob/1679ae1848c3cfdd11388626b1733bb782065156/vcclient_win_cuda_2.0.65-beta.zip), checks its SHA-256, and extracts it into `PacVoiceMod/runtime/`. The download is about 3 GB and requires additional free space for extraction. PacVoiceMod starts VCClient and continues the import when the engine responds. If you already have an extracted copy, use **Use existing VCClient folder** before importing to skip the download.
 4. Install [VB-CABLE](https://vb-audio.com/Cable/index.htm) using its administrator setup and reboot. The app's **Get VB-CABLE** button opens the official download page.
 
 ## Connect the mic, voice, and chat
@@ -37,7 +37,7 @@ The latest take is kept in memory until you record again or close PacVoiceMod. Y
 
 ## If voice import says it cannot reach VCClient
 
-Use **Set up VCClient** to select the extracted folder again if you moved it. If startup fails, read `%LOCALAPPDATA%\PacVoiceMod\vcclient.log`. The first start may take up to three minutes while the engine initializes. You can check the default port from PowerShell:
+If you selected a manual VCClient installation and moved it, use **Use existing VCClient folder** to select it again. If startup fails, read `%LOCALAPPDATA%\PacVoiceMod\vcclient.log`. The first start may take up to three minutes while the engine initializes. You can check the default port from PowerShell:
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:18888/info

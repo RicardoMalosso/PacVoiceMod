@@ -11,10 +11,12 @@ from .audio import Audio, SAMPLE_SECONDS, endpoints, play_sample, stop_playback
 from .engine import Engine, EngineUnavailable, RATE
 from .locale import translate
 from .twitch import is_command, listen
-from .vcclient import LocalVCClient, StartupError, launch_command
+from .vcclient import BUILD, LocalVCClient, StartupError, launch_command
 
 CONFIG = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "PacVoiceMod" / "settings.json"
-MODELS = Path(__file__).resolve().parents[1] / "models"
+PROJECT = Path(__file__).resolve().parents[1]
+MODELS = PROJECT / "models"
+VC_INSTALL = PROJECT / "runtime" / BUILD
 CABLE = "https://vb-audio.com/Cable/index.htm"
 
 
@@ -59,7 +61,7 @@ class App:
             saved = json.loads(CONFIG.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             saved = {}
-        self.vcclient = LocalVCClient(CONFIG.with_name("vcclient.log"))
+        self.vcclient = LocalVCClient(CONFIG.with_name("vcclient.log"), VC_INSTALL)
         self.vcclient_folder = saved.get("vcclient_folder", "")
         self.language = saved.get("language", "en-US")
         self.localized_widgets = []
@@ -88,7 +90,7 @@ class App:
         self.duration = tk.StringVar(value=saved.get("duration", "20"))
         self.restricted = tk.BooleanVar(value=saved.get("restricted", True))
         self.audio_status = tk.StringVar(value="Audio stopped")
-        self.model_status = tk.StringVar(value="Choose the extracted VCClient CUDA folder.")
+        self.model_status = tk.StringVar(value="VCClient installs automatically when you import a voice.")
         self.twitch_status = tk.StringVar(value="Twitch disconnected")
         self.meters = tk.StringVar(value="")
         self.inputs = ttk.Combobox(panel, textvariable=self.mic, state="readonly", width=45)
@@ -111,7 +113,7 @@ class App:
         for index, (label, action) in enumerate([
             ("Refresh devices", self.refresh), ("Get VB-CABLE", lambda: webbrowser.open(CABLE)),
             ("Import voice", self.pick_model), ("Load saved slot", self.prepare),
-            ("Set up VCClient", self.select_vcclient),
+            ("Use existing VCClient folder", self.select_vcclient),
             ("Start audio", self.start_audio), ("Stop audio", self.stop_audio),
             ("Connect Twitch", self.connect_twitch), ("Disconnect Twitch", self.disconnect_twitch),
             ("Test voice", self.activate), ("Return to normal", self.cancel),
@@ -142,7 +144,7 @@ class App:
         self.localized(ttk.Label, setup, "Check each step as you finish it.").pack(anchor="w", pady=(0, 6))
         for key, step in [
             ("cable", "Install VB-CABLE and reboot"),
-            ("engine", "Choose the extracted VCClient CUDA folder"),
+            ("engine", "Let PacVoiceMod install VCClient CUDA"),
             ("model", "Import a voice ZIP from models/"),
             ("devices", "Select your mic and CABLE Input"),
             ("record", "Start audio and record a test"),
@@ -156,7 +158,7 @@ class App:
             self.set_status(status, status.get())
         self.refresh()
         self.root.after(100, self.poll)
-        if self.vcclient_folder:
+        if self.vcclient_folder or VC_INSTALL.is_dir():
             self.root.after_idle(self.prepare)
 
     def tr(self, message, **values):
@@ -267,13 +269,10 @@ class App:
             try:
                 self.vcclient.ensure_running(
                     engine, folder, port,
-                    lambda: self.events.put(("model_status", ("Starting VCClient…",))),
+                    lambda status: self.events.put(("model_status", (status,))),
                 )
                 if self.vcclient.closed.is_set():
                     return
-            except EngineUnavailable:
-                self.events.put(("choose_vcclient", (weights, index)))
-                return
             except StartupError as exc:
                 self.events.put(("model", (None, exc.message, exc.details)))
                 return
@@ -401,11 +400,7 @@ class App:
                 kind, values = self.events.get_nowait()
             except Empty:
                 break
-            if kind == "choose_vcclient":
-                self.preparing = False
-                self.set_status(self.model_status, "Choose the extracted VCClient CUDA folder.")
-                self.select_vcclient(*values)
-            elif kind == "model_status":
+            if kind == "model_status":
                 self.set_status(self.model_status, values[0])
             elif kind == "model":
                 self.engine, status, details = values
