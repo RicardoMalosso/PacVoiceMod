@@ -33,15 +33,25 @@ Support standard RVC v2 inference checkpoints from [voice-models.com](https://vo
 
 ## Twitch triggers
 
-Use [Twitch public-client device-code login](https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/) and store tokens using Windows credential protection. Subscribe to [`channel.bits.use`](https://dev.twitch.tv/docs/eventsub/eventsub-subscription-types/#channelbitsuse) over EventSub WebSocket with `bits:read`. Match Cheer events for the connected broadcaster against an explicit command and a configurable minimum Bits amount. For example, `Cheer100 !helium` activates the helium preset for 20 seconds.
+In **Twitch → Triggers**, let the streamer add any number of enabled rules. Each rule selects one imported RVC voice model or DSP preset and a duration in seconds. The same voice can have separate rules and durations for each trigger type.
 
-Deduplicate by EventSub message ID and reconnect using [Twitch's WebSocket rules](https://dev.twitch.tv/docs/eventsub/handling-websocket-events/). Twitch can miss deliveries during a disconnect, so expose **Ready**, **Paused**, and **Disconnected** status. Start timing when processed audio reaches the output. Allow one effect at a time, extend matching effects up to a cap, and keep a short queue with expiry for other effects. Include **Test Effect**, **Pause Redeems**, and **Return to Normal** controls.
+| Trigger | Example | Matching |
+| --- | --- | --- |
+| Bits Cheer | `Cheer100 !robot` enables Robot for 30 seconds | Match a configured minimum Bits amount and a selector. Allow an amount-only rule when the streamer wants any qualifying Cheer to activate a default voice. An explicit selector takes priority over the default. |
+| Chat command | `!robot` enables Robot for 10 seconds | Match an exact configured command, with optional viewer-role restrictions and per-user and channel cooldowns. |
+| Channel Points | Redeem **Robot Voice** to enable Robot for 20 seconds | Select an existing custom reward from the connected channel and match its reward ID so renaming it preserves the rule. Twitch controls the points cost. |
+
+Use [Twitch public-client device-code login](https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/) and Windows credential protection. Subscribe over EventSub WebSocket using the broadcaster's user token. Use [`channel.bits.use`, `channel.chat.message`, and `channel.channel_points_custom_reward_redemption.add`](https://dev.twitch.tv/docs/eventsub/eventsub-subscription-types/) with `bits:read`, `user:read:chat`, and `channel:read:redemptions`, respectively. Request scopes for enabled trigger types. Handle Cheers only through the Bits rule path so a Cheer that contains a chat command cannot activate twice. Match each event to at most one rule, reject ambiguous rule configurations, and deduplicate EventSub deliveries and redemptions.
+
+Send all three trigger types through the same effect controller. Start the timer when processed audio reaches the output, then return to the normal mic when it expires. Allow one active effect at a time. Repeated activations of the same voice can extend it up to a cap. Other effects wait in a bounded queue with expiry. Show the current voice, time remaining, and skipped or expired activations. Provide **Test Effect**, **Pause Triggers**, and **Return to Normal**. Return to Normal immediately clears the queue and bypasses the effect.
+
+Show **Ready**, **Paused**, or **Disconnected** and reconnect using [Twitch's WebSocket rules](https://dev.twitch.tv/docs/eventsub/handling-websocket-events/). Twitch can miss deliveries during a disconnect. The first release listens to existing Channel Points rewards. Streamers manage fulfillment and refunds in Twitch.
 
 ## Milestones
 
 1. **Prove the audio route.** Run one RVC model with w-okada, VB-CABLE, and OBS on Windows 11 with the GTX 1660 SUPER. Measure mic-to-virtual-mic latency, dropouts, and peak VRAM while streaming.
 2. **Build the wizard and dry audio path.** Test driver setup on clean Windows, app and OBS restarts, USB mic reconnection, and duplicate capture. Validate helium through the same route.
 3. **Integrate the RVC worker.** Verify catalog imports, model warm-up, clean effect transitions, bounded latency, and dry audio recovery if the worker crashes during speech. Repeat the streaming benchmark with PacTTSClone active.
-4. **Integrate Twitch and package.** Test synthetic Cheers, duplicate deliveries, reconnects, and a live Cheer. Validate setup and reboot recovery with the installer.
+4. **Integrate Twitch and package.** Test all three trigger types with synthetic and live events. Cover duplicate deliveries, a Cheer containing a chat command, renamed rewards, cooldowns, reconnects, and return to dry audio when the timer expires. Validate setup and reboot recovery with the installer.
 
 Latency and VRAM are open until measured on the target hardware.
