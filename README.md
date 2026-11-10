@@ -1,5 +1,7 @@
 # PacVoiceMod
 
+**Use the official w-okada UI with Twitch.** See [Twitch companion setup](TWITCH-SETUP.md) for chat, Bits, and Channel Points triggers through OBS. The standalone recorder below is experimental.
+
 PacVoiceMod is a planned Windows 11 voice changer for Twitch streamers. It will capture a physical microphone, apply voice effects locally, and send the result to OBS through a persistent virtual microphone. Between effects, OBS receives the streamer's normal voice.
 
 ## MVP

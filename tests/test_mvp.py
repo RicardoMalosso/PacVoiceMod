@@ -200,7 +200,9 @@ class AudioTests(unittest.TestCase):
     def test_local_recording_opens_only_the_microphone(self):
         with (patch.object(audio_module.sd, "InputStream") as input_stream,
               patch.object(audio_module.sd, "Stream") as duplex_stream):
-            local = audio_module.Audio(MagicMock(), 5, None)
+            engine = MagicMock()
+            engine.convert.side_effect = lambda pcm: pcm
+            local = audio_module.Audio(engine, 5, None)
             try:
                 self.assertEqual(input_stream.call_args.kwargs["device"], 5)
                 duplex_stream.assert_not_called()
