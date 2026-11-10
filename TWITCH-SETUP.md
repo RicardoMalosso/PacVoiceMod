@@ -4,10 +4,10 @@ Keep using the official w-okada interface to import a voice, choose its pitch an
 
 ## Set up w-okada and OBS once
 
-1. In w-okada, select your physical mic as input and **CABLE Input** as output. Start conversion and leave it running. The selected voice is the one Twitch will activate. Keep headphone monitoring off if you hear a duplicate.
+1. Launch the companion using the command below. It automatically opens the w-okada copy PacVoiceMod installed in `runtime/`. If it is missing, the companion downloads it. In w-okada, select your physical mic as input and **CABLE Input** as output. Start conversion and leave it running. The selected voice is the one Twitch will activate. Keep headphone monitoring off if you hear a duplicate.
 2. In OBS, use two separate audio inputs in the scene. One captures the physical microphone and the other captures **CABLE Output**. Name the converted input **w-okada**, or enter the exact name you chose in the companion. Keep the original mic unmuted and the converted input muted before testing.
 3. In OBS, open **Tools → WebSocket Server Settings**. Enable the server and note its port and password. The default port is **4455**.
-4. Run the companion from the repo root. If the existing PacVoiceMod environment is already installed, reuse it.
+4. Use this command to launch the companion and w-okada together from the repo root. If the existing PacVoiceMod environment is already installed, reuse it.
 
    ```powershell
    .\.venv\Scripts\python.exe -m pacvoicemod.companion

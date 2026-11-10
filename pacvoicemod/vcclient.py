@@ -127,6 +127,21 @@ def launch_command(folder, port):
     raise StartupError("Select the extracted VCClient folder containing its HTTP launcher.")
 
 
+def start_desktop(destination, log, closed, status):
+    # The companion needs the official UI, so use the same launcher as the
+    # automatic installation and leave the desktop client in charge of its server.
+    folder = install_vcclient(destination, closed, status)
+    if folder is None or closed.is_set():
+        return None
+    command = launch_command(folder, 18888)
+    status("Opening the w-okada application…")
+    log.parent.mkdir(parents=True, exist_ok=True)
+    with log.open("ab") as output:
+        return subprocess.Popen(command, cwd=folder, stdin=subprocess.DEVNULL,
+                                stdout=output, stderr=subprocess.STDOUT,
+                                creationflags=subprocess.CREATE_NO_WINDOW)
+
+
 class LocalVCClient:
     def __init__(self, log, destination=None):
         self.log = log

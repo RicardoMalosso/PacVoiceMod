@@ -1,15 +1,35 @@
 import json
+from pathlib import Path
+import tempfile
 from threading import Event, Thread
 import unittest
+from unittest.mock import MagicMock, patch
 
 from websockets.sync.server import serve
 
 from pacvoicemod.companion import paid_trigger_matches
 from pacvoicemod.obs import authentication, run_effect
 from pacvoicemod.twitch import BITS, POINTS
+from pacvoicemod.vcclient import start_desktop
 
 
 class CompanionTests(unittest.TestCase):
+    def test_companion_opens_the_cached_desktop_without_downloading(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "runtime"
+            folder = destination / "w-okada"
+            folder.mkdir(parents=True)
+            (folder / "start_http.bat").touch()
+            with (patch("pacvoicemod.vcclient.requests.get") as download,
+                  patch("pacvoicemod.vcclient.subprocess.CREATE_NO_WINDOW", 0, create=True),
+                  patch("pacvoicemod.vcclient.subprocess.Popen") as launch):
+                process = start_desktop(destination, Path(temporary) / "vcclient.log",
+                                        Event(), MagicMock())
+            self.assertIs(process, launch.return_value)
+            self.assertEqual(launch.call_args.kwargs["cwd"], folder)
+            self.assertEqual(launch.call_args.args[0][-1], "start_http.bat")
+            download.assert_not_called()
+
     def start_obs(self, fail_switch=False):
         states = {"Dry": False, "Wet": True}
         actions = []

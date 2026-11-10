@@ -10,8 +10,10 @@ from tkinter import messagebox, ttk
 
 from .obs import run_effect
 from .twitch import BITS, POINTS, is_command, listen
+from .vcclient import BUILD, start_desktop
 
 
+VC_INSTALL = Path(__file__).resolve().parents[1] / "runtime" / BUILD
 SETTINGS = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "PacVoiceMod" / "companion.json"
 
 
@@ -33,6 +35,9 @@ class Companion:
         self.twitch_stop = None
         self.effect_stop = None
         self.closing = False
+        self.desktop_stop = Event()
+        self.desktop_process = None
+        self.desktop_starting = False
         try:
             saved = json.loads(SETTINGS.read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -68,15 +73,45 @@ class Companion:
         for index, (label, command) in enumerate([
             ("Connect Twitch", self.connect_twitch), ("Disconnect Twitch", self.disconnect_twitch),
             ("Test effect", self.trigger), ("Return to normal", self.cancel),
+            ("Open w-okada", self.open_desktop),
         ]):
             ttk.Button(buttons, text=label, command=command).grid(
                 row=index // 2, column=index % 2, sticky="ew", padx=2, pady=2)
         self.twitch_status = tk.StringVar(value="Twitch disconnected")
         self.effect_status = tk.StringVar(value="Ready for an OBS test")
-        for row, variable in enumerate((self.twitch_status, self.effect_status), 10):
+        self.desktop_status = tk.StringVar()
+        for row, variable in enumerate((self.desktop_status, self.twitch_status, self.effect_status), 10):
             ttk.Label(panel, textvariable=variable, wraplength=490).grid(
                 row=row, columnspan=2, sticky="w")
         root.after(100, self.poll)
+        root.after_idle(self.open_desktop)
+
+    def open_desktop(self):
+        if self.desktop_starting or self.closing:
+            return
+        if self.desktop_process and self.desktop_process.poll() is None:
+            self.desktop_status.set("w-okada is already running.")
+            return
+        self.desktop_starting = True
+        self.desktop_status.set("Looking for PacVoiceMod's w-okada installation…")
+
+        def status(message, completed=0, total=0):
+            if total:
+                message = f"{message} {min(100, completed * 100 // total)}%"
+            elif completed:
+                message = f"{message} {completed // 1024**2} MiB"
+            self.events.put(("desktop_status", None, message))
+
+        def run():
+            try:
+                process = start_desktop(VC_INSTALL, SETTINGS.with_name("vcclient.log"),
+                                        self.desktop_stop, status)
+            except Exception as exc:
+                self.events.put(("desktop_done", None, f"Could not open w-okada: {exc}"))
+            else:
+                self.events.put(("desktop_done", process, "w-okada launcher started. Set your voice and start conversion there."))
+
+        Thread(target=run, daemon=True).start()
 
     def read_settings(self):
         settings = {key: field.get().strip() for key, field in self.fields.items()}
@@ -165,7 +200,13 @@ class Companion:
                 kind, operation, value = self.events.get_nowait()
             except Empty:
                 break
-            if operation is self.effect_stop:
+            if kind == "desktop_status":
+                self.desktop_status.set(value)
+            elif kind == "desktop_done":
+                self.desktop_starting = False
+                self.desktop_process = operation
+                self.desktop_status.set(value)
+            elif operation is self.effect_stop:
                 self.effect_status.set(value)
                 if kind == "effect_done":
                     self.effect_stop = None
@@ -181,6 +222,9 @@ class Companion:
                     settings = self.read_settings()
                     if is_command(event, user, settings["command"], settings["restricted"]):
                         self.trigger()
+        if self.desktop_process and self.desktop_process.poll() not in (None, 0):
+            self.desktop_process = None
+            self.desktop_status.set("w-okada exited. See %LOCALAPPDATA%\\PacVoiceMod\\vcclient.log.")
         if self.closing and self.effect_stop is None:
             self.root.destroy()
         else:
@@ -194,6 +238,7 @@ class Companion:
         except OSError as exc:
             messagebox.showerror("Settings", str(exc))
         self.closing = True
+        self.desktop_stop.set()
         self.disconnect_twitch()
         self.cancel()
 
